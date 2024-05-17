@@ -1,0 +1,32 @@
+{
+	"folders": [
+		{
+			"name": "BasicGNNProject",
+			"path": "."
+		}
+	],
+	"settings": {
+		"[python]": {
+			"editor.defaultFormatter": "ms-python.black-formatter",
+			"editor.formatOnSave": true,
+			"editor.codeActionsOnSave": {
+				"source.organizeImports": "explicit"
+			},
+		},
+		"flake8.args": [
+			"--max-line-length",
+			"88",
+			"--select",
+			"B950",
+			"--extend-ignore",
+			"E203, E501"
+		],
+		"isort.args": [
+			"--profile",
+			"black"
+		],
+		"mypy-type-checker.severity": {
+			"error": "Information",
+		}
+	},
+}

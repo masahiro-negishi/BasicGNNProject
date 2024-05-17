@@ -1,4 +1,5 @@
 import yaml
+
 from Misc.utils import dotdict
 
 config_dict = yaml.safe_load(open("./Configs/config.yaml"))

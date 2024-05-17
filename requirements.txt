@@ -11,3 +11,4 @@ ogb
 wandb
 networkx
 torchmetrics
+types-PyYAML

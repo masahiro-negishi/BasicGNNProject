@@ -9,6 +9,7 @@ from Misc.config import config
 
 excluded_files = ["splits", "__init__.py", ".gitignore"]
 
+
 def main():
     # https://stackoverflow.com/a/185941
     folder = config.DATA_PATH
@@ -22,7 +23,8 @@ def main():
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
         except Exception as e:
-            print('Failed to delete %s. Reason: %s' % (file_path, e))
+            print("Failed to delete %s. Reason: %s" % (file_path, e))
+
 
 if __name__ == "__main__":
     main()

@@ -4,13 +4,15 @@ This transform allows us to remove all except the target from the dataset.
 """
 
 import torch
-from torch_geometric.data import Data
-from torch_geometric.transforms import BaseTransform
+from torch_geometric.data import Data  # type: ignore
+from torch_geometric.transforms import BaseTransform  # type: ignore
+
 
 class SelectOnlyOneTarget(BaseTransform):
-    r""" 
+    r"""
     Select only one target from data.y
     """
+
     def __init__(self, target):
         self.target = target
 
@@ -18,6 +20,6 @@ class SelectOnlyOneTarget(BaseTransform):
         data.y = torch.unsqueeze(data.y[:, self.target], 1)
         data.num_classes = 1
         return data
-    
+
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}({self.target})'
+        return f"{self.__class__.__name__}({self.target})"

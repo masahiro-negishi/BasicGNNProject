@@ -1,35 +1,66 @@
 import torch
-from torch_geometric.nn import MessagePassing, GINEConv, GATv2Conv
-from torch_geometric.nn.models import JumpingKnowledge
-from torch_geometric.utils import degree
-from torch.nn import Linear, ReLU, ModuleList, Sequential, BatchNorm1d, Dropout
-import torch.nn.functional as F
+from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, Sequential
+from torch_geometric.nn import GATv2Conv, GINEConv, MessagePassing  # type: ignore
+from torch_geometric.nn.models import JumpingKnowledge  # type: ignore
+from torch_geometric.utils import degree  # type: ignore
 
-from Models.utils import get_pooling_fct, get_activation, get_mlp
 from Misc.utils import PredictionType
+from Models.utils import get_activation, get_mlp, get_pooling_fct
+
 
 def get_mp_layer(emb_dim, activation, mp_type):
     if mp_type.lower() == "gin":
-        nn = Sequential(Linear(emb_dim, 2*emb_dim), BatchNorm1d(2*emb_dim), activation, Linear(2*emb_dim, emb_dim))
-        return GINEConv(nn = nn)
+        nn = Sequential(
+            Linear(emb_dim, 2 * emb_dim),
+            BatchNorm1d(2 * emb_dim),
+            activation,
+            Linear(2 * emb_dim, emb_dim),
+        )
+        return GINEConv(nn=nn)
     elif mp_type.lower() == "gcn":
         return GCNConv(emb_dim=emb_dim, activation=activation)
     elif mp_type.lower() == "gat":
-        mp_layer = GATv2Conv(in_channels=emb_dim, out_channels=emb_dim, edge_dim=emb_dim, heads=3, concat=False)
-        nn = Sequential(Linear(emb_dim, 2*emb_dim), BatchNorm1d(2*emb_dim), activation, Linear(2*emb_dim, emb_dim))
+        mp_layer = GATv2Conv(
+            in_channels=emb_dim,
+            out_channels=emb_dim,
+            edge_dim=emb_dim,
+            heads=3,
+            concat=False,
+        )
+        nn = Sequential(
+            Linear(emb_dim, 2 * emb_dim),
+            BatchNorm1d(2 * emb_dim),
+            activation,
+            Linear(2 * emb_dim, emb_dim),
+        )
         return ConvWrapper(conv=mp_layer, nn=nn)
-    raise Exception("Unknown message passing type")    
-    
+    raise Exception("Unknown message passing type")
+
+
 class MPNN(torch.nn.Module):
 
-    def __init__(self, num_classes, num_tasks, num_layer, emb_dim, 
-                    gnn_type, residual, drop_ratio, JK, graph_pooling,
-                    node_encoder, edge_encoder, num_mlp_layers, activation, prediction_type):
+    def __init__(
+        self,
+        num_classes,
+        num_tasks,
+        num_layer,
+        emb_dim,
+        gnn_type,
+        residual,
+        drop_ratio,
+        JK,
+        graph_pooling,
+        node_encoder,
+        edge_encoder,
+        num_mlp_layers,
+        activation,
+        prediction_type,
+    ):
         """
         Message passing graph neural network.
         """
         super(MPNN, self).__init__()
-        
+
         self.num_classes = num_classes
         self.num_tasks = num_tasks
         self.num_layer = num_layer
@@ -39,11 +70,11 @@ class MPNN(torch.nn.Module):
         self.edge_encoder = edge_encoder
         self.activation = get_activation(activation)
         self.prediction_type = prediction_type
-        
+
         assert self.num_layer >= 1
-        
+
         # Todo: virtual node
-        
+
         # Message Passing Layers
         print(f"Message Passing Layers: {gnn_type}")
         self.mp_layers, self.batch_norms = ModuleList([]), ModuleList([])
@@ -51,7 +82,7 @@ class MPNN(torch.nn.Module):
         for _ in range(self.num_layer):
             self.batch_norms.append(torch.nn.BatchNorm1d(emb_dim))
             self.mp_layers.append(get_mp_layer(emb_dim, self.activation, gnn_type))
-            
+
         # Jumping Knowledge
         self.JK_type = JK
         if self.JK_type == "concat":
@@ -62,52 +93,68 @@ class MPNN(torch.nn.Module):
             self.JK = lambda ls: ls[-1]
 
         # Prediction Layer
-        if prediction_type in [PredictionType.NODE_PREDICTION, PredictionType.GRAPH_PREDICTION]:
+        if prediction_type in [
+            PredictionType.NODE_PREDICTION,
+            PredictionType.GRAPH_PREDICTION,
+        ]:
             print(f"Graph pooling function: {graph_pooling}")
             self.pool = get_pooling_fct(graph_pooling)
-            self.mlp = get_mlp(num_layers=num_mlp_layers, 
-                            in_dim=self.emb_dim if self.JK_type != "concat" else self.emb_dim*(self.num_layer+1), 
-                            out_dim=self.num_classes*self.num_tasks, 
-                            hidden_dim=self.emb_dim // 2, 
-                            activation=self.activation, 
-                            dropout_rate=drop_ratio)
+            self.mlp = get_mlp(
+                num_layers=num_mlp_layers,
+                in_dim=(
+                    self.emb_dim
+                    if self.JK_type != "concat"
+                    else self.emb_dim * (self.num_layer + 1)
+                ),
+                out_dim=self.num_classes * self.num_tasks,
+                hidden_dim=self.emb_dim // 2,
+                activation=self.activation,
+                dropout_rate=drop_ratio,
+            )
 
     def forward(self, batched_data):
-        x, edge_index, edge_attr, batch = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.batch
+        x, edge_index, edge_attr, batch = (
+            batched_data.x,
+            batched_data.edge_index,
+            batched_data.edge_attr,
+            batched_data.batch,
+        )
         edge_attr = self.edge_encoder(edge_attr)
-        
-        # Each entry is the embedding of all nodes per message passing layers 
+
+        # Each entry is the embedding of all nodes per message passing layers
         h_list = [self.node_encoder(x)]
         for layer, mp_layer in enumerate(self.mp_layers):
-            h = mp_layer(x=h_list[layer], edge_index=edge_index, edge_attr=edge_attr)  
+            h = mp_layer(x=h_list[layer], edge_index=edge_index, edge_attr=edge_attr)
             h = self.batch_norms[layer](h)
             h = self.dropout(h)
 
             if self.residual:
                 h += h_list[layer]
-            
+
             # No ReLU for last layer
             if layer != self.num_layer - 1:
                 h = self.activation(h)
 
             h_list.append(h)
-        
+
         h_node = self.JK(h_list)
-       
+
         if self.prediction_type == PredictionType.NODE_EMBEDDING:
             return h_node
-        
+
         elif self.prediction_type == PredictionType.NODE_PREDICTION:
             prediction = self.mlp(h_node)
-            
+
         elif self.prediction_type == PredictionType.GRAPH_PREDICTION:
             h_graph = self.pool(h_node, batched_data.batch)
             prediction = self.mlp(h_graph)
-        
-        else: # PredictionType.EDGE_PREDICTION
+
+        else:  # PredictionType.EDGE_PREDICTION
             h_edge_endpoints = h_node[batched_data.edge_label_index]
-            prediction = torch.sum(h_edge_endpoints[0,:,:] * h_edge_endpoints[1,:,:], dim=-1)
-            
+            prediction = torch.sum(
+                h_edge_endpoints[0, :, :] * h_edge_endpoints[1, :, :], dim=-1
+            )
+
         # Reshape prediction to fit task
         if self.num_tasks == 1:
             prediction = prediction.view(-1, self.num_classes)
@@ -115,24 +162,28 @@ class MPNN(torch.nn.Module):
             prediction.view(-1, self.num_tasks, self.num_classes)
         return prediction
 
+
 class ConvWrapper(torch.nn.Module):
     """
     Wrapper to combine a convolutional message passing layers with few neurons (e.g. GAT) together with larger MLPs
     """
+
     def __init__(self, conv, nn):
         super(ConvWrapper, self).__init__()
         self.conv = conv
         self.nn = nn
-        
+
     def forward(self, x, edge_index, edge_attr):
         return self.nn(self.conv(x, edge_index, edge_attr))
+
 
 class GCNConv(MessagePassing):
     """
     Adapted from https://github.com/snap-stanford/ogb/blob/master/examples/graphproppred/mol/conv.py (MIT License)
     """
+
     def __init__(self, emb_dim, activation):
-        super(GCNConv, self).__init__(aggr='add')
+        super(GCNConv, self).__init__(aggr="add")
 
         self.linear = torch.nn.Linear(emb_dim, emb_dim)
         self.root_emb = torch.nn.Embedding(1, emb_dim)
@@ -143,13 +194,15 @@ class GCNConv(MessagePassing):
 
         row, col = edge_index
 
-        deg = degree(row, x.size(0), dtype = x.dtype) + 1
+        deg = degree(row, x.size(0), dtype=x.dtype) + 1
         deg_inv_sqrt = deg.pow(-0.5)
-        deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
+        deg_inv_sqrt[deg_inv_sqrt == float("inf")] = 0
 
         norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
 
-        return self.propagate(edge_index, x=x, edge_attr = edge_attr, norm=norm) + self.activation(x + self.root_emb.weight) * 1./deg.view(-1,1)
+        return self.propagate(
+            edge_index, x=x, edge_attr=edge_attr, norm=norm
+        ) + self.activation(x + self.root_emb.weight) * 1.0 / deg.view(-1, 1)
 
     def message(self, x_j, edge_attr, norm):
         return norm.view(-1, 1) * self.activation(x_j + edge_attr)

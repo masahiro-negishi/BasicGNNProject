@@ -1,26 +1,31 @@
 import torch
-import torch.nn.functional as F
-from torch_geometric.nn import global_mean_pool, global_add_pool, global_max_pool
-from torch.nn import Dropout, BatchNorm1d, Sequential, Linear
+from torch.nn import BatchNorm1d, Dropout, Linear, Sequential
+from torch_geometric.nn import (  # type: ignore
+    global_add_pool,
+    global_max_pool,
+    global_mean_pool,
+)
+
 
 def get_activation(activation):
     match activation:
-        case 'relu':
+        case "relu":
             return torch.nn.ReLU()
-        case 'elu':
+        case "elu":
             return torch.nn.ELU()
-        case 'id':
+        case "id":
             return torch.nn.Identity()
-        case 'sigmoid':
+        case "sigmoid":
             return torch.nn.Sigmoid()
-        case 'tanh':
+        case "tanh":
             return torch.nn.Tanh()
-        case 'gelu':
+        case "gelu":
             return torch.nn.GELU()
         case _:
             raise NotImplementedError(f"Activation {activation} not implemented")
 
-def get_pooling_fct(readout):    
+
+def get_pooling_fct(readout):
     if readout == "sum":
         return global_add_pool
     elif readout == "mean":
@@ -30,6 +35,7 @@ def get_pooling_fct(readout):
     else:
         raise NotImplementedError(f"Readout {readout} is not currently supported.")
 
+
 def get_mlp(num_layers, in_dim, out_dim, hidden_dim, activation, dropout_rate):
     layers = []
     for i in range(num_layers):
@@ -38,9 +44,9 @@ def get_mlp(num_layers, in_dim, out_dim, hidden_dim, activation, dropout_rate):
 
         layers.append(Linear(in_size, out_size))
         layers.append(BatchNorm1d(out_size))
-                    
+
         if num_layers > 0 and i < num_layers - 1:
             layers.append(Dropout(p=dropout_rate))
             layers.append(activation)
-            
+
     return Sequential(*layers)
