@@ -6,6 +6,6 @@
   "LOCAL_TRACKING_PATH": "./Tracking", 
   
   # Which tracker to use: Local, WandB, None
-  "tracker": "WandB",
+  "tracker": "None",
   "project": "BasicGNNProject"
 }
