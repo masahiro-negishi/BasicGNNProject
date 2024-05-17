@@ -71,6 +71,8 @@ def add_training_arguments(parser):
         default=32,
         help="Input batch size for training (default: 32)",
     )
+    parser.add_argument("--k_fold", type=int, default=5, help="Number of folds")
+    parser.add_argument("--test_fold", type=int, default=0, help="fold to test on")
 
 
 def add_data_arguments(parser):

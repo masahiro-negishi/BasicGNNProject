@@ -1,6 +1,7 @@
 import csv
 import os
 
+import numpy as np
 import torch
 import torch.optim as optim
 from ogb.graphproppred import Evaluator, PygGraphPropPredDataset  # type: ignore
@@ -13,6 +14,7 @@ from torch_geometric.datasets import (  # type: ignore
     ZINC,
     GNNBenchmarkDataset,
     LRGBDataset,
+    TUDataset,
 )
 from torch_geometric.loader import DataLoader  # type: ignore
 from torch_geometric.transforms import Compose, OneHotDegree  # type: ignore
@@ -176,6 +178,29 @@ def load_dataset(args, config):
             dataset[indices["train"][0]],
             dataset[indices["val"][0]],
             dataset[indices["test"][0]],
+        ]
+
+    # TU datasets
+    elif dataset_name == "mutag":
+        dataset = TUDataset(root=dir, name="MUTAG", pre_transform=transform)
+        n_samples = len(dataset)
+        indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
+        train_indices = np.concatenate(
+            (
+                indices[: (args.test_fold * n_samples) // args.k_fold],
+                indices[(args.test_fold + 1) * n_samples // args.k_fold :],
+            )
+        )
+        eval_indices = indices[
+            (args.test_fold * n_samples)
+            // args.k_fold : (args.test_fold + 1)
+            * n_samples
+            // args.k_fold
+        ]
+        datasets = [
+            dataset[train_indices],
+            dataset[eval_indices],
+            dataset[eval_indices],
         ]
     else:
         raise NotImplementedError("Unknown dataset")
@@ -418,6 +443,9 @@ def get_loss(dataset_name):
         loss = torch.nn.CrossEntropyLoss()
         metric = "mrr"
         metric_method = mrr_fct
+    elif dataset_name_lowercase == "mutag":
+        loss = torch.nn.CrossEntropyLoss()
+        metric = "accuracy"
     else:
         raise NotImplementedError("No loss for this dataset")
 
