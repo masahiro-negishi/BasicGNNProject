@@ -32,8 +32,10 @@ def add_training_arguments(parser):
                         help='Max time (in hours) for one run')
     parser.add_argument('--epochs', type=int, default=100,
                         help='Number of epochs to train (default: 100)')
-    parser.add_argument('--device', type=int, default=0,
-                    help='Which gpu to use if any (default: 0)')
+    # parser.add_argument('--device', type=int, default=0,
+    #                 help='Which gpu to use if any (default: 0)')
+    parser.add_argument('--device', type=str, default="cpu",
+                    help='Which device to use(default: cpu)')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='Learning rate (default: 0.001)')
     parser.add_argument('--batch_size', type=int, default=32,
