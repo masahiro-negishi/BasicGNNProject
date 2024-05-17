@@ -3,7 +3,6 @@ Create a train / val / test split for a dataset.
 Stores the split in the directory specified in the config.
 """
 
-import json
 import os
 
 import numpy as np

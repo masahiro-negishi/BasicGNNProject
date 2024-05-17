@@ -2,7 +2,7 @@ import os
 
 import torch
 from torch_geometric.datasets import QM9  # type: ignore
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore
 
 from Misc.config import config
 
