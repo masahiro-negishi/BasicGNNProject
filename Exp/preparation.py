@@ -182,7 +182,7 @@ def load_dataset(args, config):
 
     # TU datasets
     elif dataset_name == "mutag":
-        dataset = TUDataset(root=dir, name="MUTAG", pre_transform=transform)
+        dataset = TUDataset(root=dir, name="MUTAG")
         n_samples = len(dataset)
         indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
         train_indices = np.concatenate(
@@ -268,6 +268,9 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
         elif "qm9" in dataset_name:
             node_feature_dims += [2, 2, 2, 2, 2, 10, 1, 1, 1, 1, 5]
             edge_feature_dims += [2, 2, 2, 1]
+        elif dataset_name == "mutag":
+            node_feature_dims.append(7)
+            edge_feature_dims.append(4)
 
         if dataset_name == "pascalvoc-sp":
             node_encoder, edge_encoder = VOCNodeEncoder(

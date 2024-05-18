@@ -18,8 +18,18 @@ def get_tracking_dict():
 def compute_loss_predictions(
     batch, model, metric, device, loss_fn, tracking_dict, prediction_type
 ):
+    MUTAG = False
     if batch.edge_attr is not None and len(batch.edge_attr.shape) == 1:
         batch.edge_attr = batch.edge_attr.view(-1, 1)
+    # MUTAG
+    elif (
+        batch.x.shape[1] == 7
+        and batch.edge_attr is not None
+        and batch.edge_attr.shape[1] == 4
+    ):
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
+        batch.edge_attr = torch.argmax(batch.edge_attr, dim=1, keepdim=True)
+        MUTAG = True
 
     batch = batch.to(device)
     predictions = model(batch)
@@ -29,20 +39,21 @@ def compute_loss_predictions(
     else:
         y = batch.y
 
-    nr_predictions = y.shape[0]
+    if not MUTAG:
+        nr_predictions = y.shape[0]
 
-    if model.num_tasks == 1:
-        y = y.view(nr_predictions, -1)
-    else:
-        y = y.view(nr_predictions, model.num_tasks)
+        if model.num_tasks == 1:
+            y = y.view(nr_predictions, -1)
+        else:
+            y = y.view(nr_predictions, model.num_tasks)
 
-    if y.shape[1] == 1 and metric == "accuracy":
-        y = F.one_hot(torch.squeeze(y, 1), 10)
+        if y.shape[1] == 1 and metric == "accuracy":
+            y = F.one_hot(torch.squeeze(y, 1), 10)
 
-    is_labeled = y == y
+        is_labeled = y == y
 
-    if y.dtype == torch.int64:
-        y = y.float()
+        if y.dtype == torch.int64:
+            y = y.float()
     ground_truth = y
 
     if metric in ["accuracy"]:
@@ -53,9 +64,14 @@ def compute_loss_predictions(
         else:
             loss = loss_fn(predictions, ground_truth)
     if metric == "accuracy":
-        tracking_dict["correct_classifications"] += torch.sum(
-            predictions.argmax(dim=1) == ground_truth.argmax(dim=1)
-        ).item()
+        if MUTAG:
+            tracking_dict["correct_classifications"] += torch.sum(
+                predictions.argmax(dim=1) == ground_truth
+            ).item()
+        else:
+            tracking_dict["correct_classifications"] += torch.sum(
+                predictions.argmax(dim=1) == ground_truth.argmax(dim=1)
+            ).item()
 
     tracking_dict["y_preds"] += predictions.cpu()
     tracking_dict["y_true"] += ground_truth.cpu()
