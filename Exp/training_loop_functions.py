@@ -80,6 +80,25 @@ def compute_loss_predictions(
     return loss
 
 
+def compute_embeddings(batch, model, device):
+    MUTAG = False
+    if batch.edge_attr is not None and len(batch.edge_attr.shape) == 1:
+        batch.edge_attr = batch.edge_attr.view(-1, 1)
+    # MUTAG
+    elif (
+        batch.x.shape[1] == 7
+        and batch.edge_attr is not None
+        and batch.edge_attr.shape[1] == 4
+    ):
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
+        batch.edge_attr = torch.argmax(batch.edge_attr, dim=1, keepdim=True)
+        MUTAG = True
+
+    batch = batch.to(device)
+    embeddings = model.forward_to_pooling(batch)
+    return embeddings
+
+
 def compute_final_tracking_dict(
     tracking_dict, output_dict, loader, metric, metric_method, train=False
 ):

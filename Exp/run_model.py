@@ -2,6 +2,8 @@
 Trains and evaluates a model a single time for given hyperparameters.
 """
 
+import json
+import os
 import random
 import time
 
@@ -16,7 +18,7 @@ from Exp.preparation import (
     get_prediction_type,
     load_dataset,
 )
-from Exp.training_loop_functions import eval, step_scheduler, train
+from Exp.training_loop_functions import compute_embeddings, eval, step_scheduler, train
 from Misc.config import config
 from Misc.tracking import get_tracker
 from Misc.utils import list_of_dictionary_to_dictionary_of_lists
@@ -57,7 +59,7 @@ def main(args):
     dataset_name = args.dataset
 
     set_seed(args.seed)
-    train_loader, val_loader, test_loader = load_dataset(args, config)
+    full_loader, train_loader, val_loader, test_loader = load_dataset(args, config)
     num_classes, num_vertex_features = (
         train_loader.dataset.num_classes,
         train_loader.dataset.num_node_features,
@@ -214,6 +216,32 @@ def main(args):
         )
 
         tracker.finish()
+
+    # Save results
+    if args.save_rslt:
+        path = os.path.join(
+            config.RESULTS_PATH, args.dataset, args.model, f"fold{args.test_fold}"
+        )
+        os.makedirs(path, exist_ok=True)
+        torch.save(model.state_dict(), os.path.join(path, "model.pt"))
+        with open(os.path.join(path, "results.json"), "w") as f:
+            json.dump(
+                {"train": train_results, "val": val_results, "test": test_result}, f
+            )
+    if args.save_dist:
+        model.eval()
+        embeddings = torch.cat(
+            [
+                compute_embeddings(batch, model, device).detach()
+                for batch in full_loader
+            ],
+            dim=0,
+        )
+        # L1/L2 distance
+        dist_1 = torch.cdist(embeddings, embeddings, p=1)
+        dist_2 = torch.cdist(embeddings, embeddings, p=2)
+        torch.save(dist_1, os.path.join(path, "dist_1.pt"))
+        torch.save(dist_2, os.path.join(path, "dist_2.pt"))
 
     return {
         "mode": mode,

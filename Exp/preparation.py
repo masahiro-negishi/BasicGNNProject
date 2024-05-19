@@ -97,6 +97,7 @@ def load_dataset(args, config):
     # ZINC
     if dataset_name in ["zinc", "zinc_full"]:
         subset = "full" not in dataset_name
+        dataset = None
         datasets = [
             ZINC(root=dir, subset=subset, split=split, pre_transform=transform)
             for split in ["train", "val", "test"]
@@ -141,6 +142,7 @@ def load_dataset(args, config):
 
     # Long Rage Graph Benchmark datsets
     elif dataset_name == "peptides-func":
+        dataset = None
         datasets = [
             LRGBDataset(
                 root=dir, name="Peptides-func", split=split, pre_transform=transform
@@ -148,6 +150,7 @@ def load_dataset(args, config):
             for split in ["train", "val", "test"]
         ]
     elif dataset_name == "peptides-struct":
+        dataset = None
         datasets = [
             LRGBDataset(
                 root=dir, name="Peptides-struct", split=split, pre_transform=transform
@@ -155,6 +158,7 @@ def load_dataset(args, config):
             for split in ["train", "val", "test"]
         ]
     elif dataset_name == "pascalvoc-sp":
+        dataset = None
         datasets = [
             LRGBDataset(
                 root=dir, name="PascalVOC-SP", split=split, pre_transform=transform
@@ -164,6 +168,7 @@ def load_dataset(args, config):
     # elif dataset_name == "coco-sp":
     #     datasets = [LRGBDataset(root=dir, name='COCO-SP', split=split, pre_transform=transform) for split in ["train", "val", "test"]]
     elif dataset_name == "pcqm-contact":
+        dataset = None
         datasets = [
             LRGBDataset(
                 root=dir, name="PCQM-Contact", split=split, pre_transform=transform
@@ -230,7 +235,12 @@ def load_dataset(args, config):
         val_loader = DataLoader(datasets[1], batch_size=args.batch_size, shuffle=False)
         test_loader = DataLoader(datasets[2], batch_size=args.batch_size, shuffle=False)
 
-    return train_loader, val_loader, test_loader
+    if dataset is not None:
+        full_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
+    else:
+        full_loader = None
+
+    return full_loader, train_loader, val_loader, test_loader
 
 
 def get_model(args, num_classes, num_vertex_features, num_tasks):

@@ -162,6 +162,38 @@ class MPNN(torch.nn.Module):
             prediction.view(-1, self.num_tasks, self.num_classes)
         return prediction
 
+    def forward_to_pooling(self, batched_data):
+        x, edge_index, edge_attr, batch = (
+            batched_data.x,
+            batched_data.edge_index,
+            batched_data.edge_attr,
+            batched_data.batch,
+        )
+        edge_attr = self.edge_encoder(edge_attr)
+
+        # Each entry is the embedding of all nodes per message passing layers
+        h_list = [self.node_encoder(x)]
+        for layer, mp_layer in enumerate(self.mp_layers):
+            h = mp_layer(x=h_list[layer], edge_index=edge_index, edge_attr=edge_attr)
+            h = self.batch_norms[layer](h)
+            h = self.dropout(h)
+
+            if self.residual:
+                h += h_list[layer]
+
+            # No ReLU for last layer
+            if layer != self.num_layer - 1:
+                h = self.activation(h)
+
+            h_list.append(h)
+
+        h_node = self.JK(h_list)
+
+        if self.prediction_type == PredictionType.GRAPH_PREDICTION:
+            return self.pool(h_node, batched_data.batch)
+        else:
+            raise Exception("This function is only for graph prediction")
+
 
 class ConvWrapper(torch.nn.Module):
     """
