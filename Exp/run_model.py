@@ -228,6 +228,11 @@ def main(args):
             json.dump(
                 {"train": train_results, "val": val_results, "test": test_result}, f
             )
+        with open(
+            os.path.join(config.RESULTS_PATH, args.dataset, args.model, "info.json"),
+            "w",
+        ) as f:
+            json.dump(args.__dict__, f)
     if args.save_dist:
         model.eval()
         embeddings = torch.cat(
