@@ -186,8 +186,11 @@ def load_dataset(args, config):
         ]
 
     # TU datasets
-    elif dataset_name == "mutag":
-        dataset = TUDataset(root=dir, name="MUTAG")
+    elif dataset_name in ["mutag", "mutagenicity"]:
+        if dataset_name == "mutag":
+            dataset = TUDataset(root=dir, name="MUTAG")
+        else:
+            dataset = TUDataset(root=dir, name="Mutagenicity")
         n_samples = len(dataset)
         indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
         train_indices = np.concatenate(
@@ -281,6 +284,9 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
         elif dataset_name == "mutag":
             node_feature_dims.append(7)
             edge_feature_dims.append(4)
+        elif dataset_name == "mutagenicity":
+            node_feature_dims.append(14)
+            edge_feature_dims.append(3)
 
         if dataset_name == "pascalvoc-sp":
             node_encoder, edge_encoder = VOCNodeEncoder(
@@ -456,7 +462,7 @@ def get_loss(dataset_name):
         loss = torch.nn.CrossEntropyLoss()
         metric = "mrr"
         metric_method = mrr_fct
-    elif dataset_name_lowercase == "mutag":
+    elif dataset_name_lowercase in ["mutag", "mutagenicity"]:
         loss = torch.nn.CrossEntropyLoss()
         metric = "accuracy"
     else:
