@@ -220,7 +220,11 @@ def main(args):
     # Save results
     if args.save_rslt:
         path = os.path.join(
-            config.RESULTS_PATH, args.dataset, args.model, f"fold{args.test_fold}"
+            config.RESULTS_PATH,
+            args.dataset,
+            args.model,
+            str(args.num_mp_layers),
+            f"fold{args.test_fold}",
         )
         os.makedirs(path, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(path, "model.pt"))
@@ -229,7 +233,13 @@ def main(args):
                 {"train": train_results, "val": val_results, "test": test_result}, f
             )
         with open(
-            os.path.join(config.RESULTS_PATH, args.dataset, args.model, "info.json"),
+            os.path.join(
+                config.RESULTS_PATH,
+                args.dataset,
+                args.model,
+                str(args.num_mp_layers),
+                "info.json",
+            ),
             "w",
         ) as f:
             json.dump(args.__dict__, f)
