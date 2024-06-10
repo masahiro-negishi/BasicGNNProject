@@ -230,7 +230,22 @@ def main(args):
         torch.save(model.state_dict(), os.path.join(path, "model.pt"))
         with open(os.path.join(path, "results.json"), "w") as f:
             json.dump(
-                {"train": train_results, "val": val_results, "test": test_result}, f
+                {
+                    "mode": mode,
+                    "loss_train": loss_train,
+                    "loss_val": loss_val,
+                    "loss_test": loss_test,
+                    "val": result_val,
+                    "test": result_test,
+                    "runtime_hours": runtime,
+                    "epochs": epoch,
+                    "best_val_epoch": int(best_val_epoch),
+                    "parameters": nr_parameters,
+                    "details_train": train_results,
+                    "details_val": val_results,
+                    "details_test": test_results,
+                },
+                f,
             )
         with open(
             os.path.join(
