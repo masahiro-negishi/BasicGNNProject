@@ -137,3 +137,6 @@ dmypy.json
 
 # env
 bgnn_env/
+
+# evaluation results
+Evals/
