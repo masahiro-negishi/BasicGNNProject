@@ -180,7 +180,7 @@ def main(args):
     # Final result
     train_results = list_of_dictionary_to_dictionary_of_lists(train_results)
     val_results = list_of_dictionary_to_dictionary_of_lists(val_results)
-    test_result = list_of_dictionary_to_dictionary_of_lists(test_results)
+    test_results = list_of_dictionary_to_dictionary_of_lists(test_results)
 
     if eval_name in ["mae", "rmse (ogb)"]:
         best_val_epoch = np.argmin(val_results[eval_name])
@@ -192,11 +192,12 @@ def main(args):
     loss_train, loss_val, loss_test = (
         train_results["total_loss"][best_val_epoch],
         val_results["total_loss"][best_val_epoch],
-        test_result["total_loss"][best_val_epoch],
+        test_results["total_loss"][best_val_epoch],
     )
-    result_val, result_test = (
+    results_train, result_val, result_test = (
+        train_results[eval_name][best_val_epoch],
         val_results[eval_name][best_val_epoch],
-        test_result[eval_name][best_val_epoch],
+        test_results[eval_name][best_val_epoch],
     )
 
     print("\n\nFinal Result:")
@@ -223,7 +224,7 @@ def main(args):
             config.RESULTS_PATH,
             args.dataset,
             args.model,
-            str(args.num_mp_layers),
+            f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
             f"fold{args.test_fold}",
         )
         os.makedirs(path, exist_ok=True)
@@ -235,6 +236,7 @@ def main(args):
                     "loss_train": loss_train,
                     "loss_val": loss_val,
                     "loss_test": loss_test,
+                    "train": results_train,
                     "val": result_val,
                     "test": result_test,
                     "runtime_hours": runtime,
@@ -252,7 +254,7 @@ def main(args):
                 config.RESULTS_PATH,
                 args.dataset,
                 args.model,
-                str(args.num_mp_layers),
+                f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
                 "info.json",
             ),
             "w",
@@ -268,16 +270,17 @@ def main(args):
             dim=0,
         )
         # L1/L2 distance
-        dist_1 = torch.cdist(embeddings, embeddings, p=1)
-        dist_2 = torch.cdist(embeddings, embeddings, p=2)
-        torch.save(dist_1, os.path.join(path, "dist_1.pt"))
-        torch.save(dist_2, os.path.join(path, "dist_2.pt"))
+        dist_l1 = torch.cdist(embeddings, embeddings, p=1)
+        dist_l2 = torch.cdist(embeddings, embeddings, p=2)
+        torch.save(dist_l1, os.path.join(path, "dist_l1.pt"))
+        torch.save(dist_l2, os.path.join(path, "dist_l2.pt"))
 
     return {
         "mode": mode,
         "loss_train": loss_train,
         "loss_val": loss_val,
         "loss_test": loss_test,
+        "train": results_train,
         "val": result_val,
         "test": result_test,
         "runtime_hours": runtime,

@@ -223,7 +223,8 @@ def train(
         train_loader,
         eval_name,
         metric_method=metric_method,
-        train=True,
+        # train=True,
+        train=False,  # To calculate accuracy on the training set
     )
 
 
