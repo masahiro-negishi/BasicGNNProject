@@ -8,8 +8,9 @@ import torch
 from torch_geometric.datasets import TUDataset  # type: ignore
 
 KFOLD = 5
-EPOCHS = 100
+EPOCHS = 30
 SEED = 0
+DATASET = "MUTAG"
 
 
 def visualize_loss(
@@ -95,7 +96,7 @@ def visualize_loss(
 
 
 def neighbors_correspondence(
-    dataset: str,
+    dataset_name: str,
     model: str,
     layer: int,
     emb_dim: int,
@@ -108,7 +109,7 @@ def neighbors_correspondence(
     dirpath = os.path.join(
         os.path.dirname(__file__),
         "../Results",
-        dataset,
+        dataset_name,
         model,
         f"l={layer}_p={pooling}_d={emb_dim}",
     )
@@ -120,9 +121,9 @@ def neighbors_correspondence(
 
     dataset = TUDataset(
         root=os.path.join(
-            os.path.dirname(__file__), "../Data/Datasets", dataset, "Compose([])"
+            os.path.dirname(__file__), "../Data/Datasets", dataset_name, "Compose([])"
         ),
-        name=dataset,
+        name=dataset_name,
     )
     n_samples = len(dataset)
     indices = np.random.RandomState(seed=SEED).permutation(n_samples)
@@ -138,6 +139,18 @@ def neighbors_correspondence(
         test_indices = indices[
             (fold * n_samples) // KFOLD : (fold + 1) * n_samples // KFOLD
         ]
+        # list of all classes in dataset
+        dataset_y = torch.tensor([g.y for g in dataset])
+        classes = torch.unique(dataset_y)
+        train_expectation = torch.zeros(len(classes))
+        test_expectation = torch.zeros(len(classes))
+        for cidx, c in enumerate(classes):
+            train_expectation[cidx] = (
+                torch.sum(dataset_y[train_indices] == c).item() - 1
+            ) / len(train_indices)
+            test_expectation[cidx] = (
+                torch.sum(dataset_y[test_indices] == c).item() - 1
+            ) / len(test_indices)
         for midx, metric in enumerate(metrics):
             dist_mat = torch.load(
                 os.path.join(dirpath, f"fold{fold}", f"dist_{metric}.pt")
@@ -159,6 +172,9 @@ def neighbors_correspondence(
             for kidx, k in enumerate(ks):
                 keep_train[midx, kidx, fold] = torch.mean(
                     corresp[:, :k].sum(dim=1) / k
+                    - torch.tensor(
+                        [train_expectation[g.y] for g in dataset[train_indices]]
+                    )
                 ).item()
             # test
             dist_mat_test = dist_mat[test_indices][:, test_indices]
@@ -177,6 +193,9 @@ def neighbors_correspondence(
             for kidx, k in enumerate(ks):
                 keep_test[midx, kidx, fold] = torch.mean(
                     corresp[:, :k].sum(dim=1) / k
+                    - torch.tensor(
+                        [test_expectation[g.y] for g in dataset[test_indices]]
+                    )
                 ).item()
 
     # average over kfold
@@ -336,7 +355,7 @@ if __name__ == "__main__":
     if args[1] == "visualize_loss":
         for model in ["GAT", "GCN", "GIN"]:
             visualize_loss(
-                dataset="Mutagenicity",
+                dataset=DATASET,
                 model=model,
                 layers=[1, 2, 3, 4],
                 emb_dims=[32, 64, 128],
@@ -351,7 +370,7 @@ if __name__ == "__main__":
                             f"model: {model}, layer: {layer}, emb_dim: {emb_dim}, pooling: {pooling}"
                         )
                         neighbors_correspondence(
-                            dataset="Mutagenicity",
+                            dataset_name=DATASET,
                             model=model,
                             layer=layer,
                             emb_dim=emb_dim,
@@ -361,7 +380,7 @@ if __name__ == "__main__":
                         )
     elif args[1] == "neighbor_acc_plot":
         neighbor_acc_plot(
-            dataset="Mutagenicity",
+            dataset=DATASET,
             layers=[1, 2, 3, 4],
             emb_dims=[32, 64, 128],
             poolings=["mean", "sum"],
