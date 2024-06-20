@@ -186,11 +186,15 @@ def load_dataset(args, config):
         ]
 
     # TU datasets
-    elif dataset_name in ["mutag", "mutagenicity"]:
+    elif dataset_name in ["mutag", "mutagenicity", "nci1"]:
         if dataset_name == "mutag":
             dataset = TUDataset(root=dir, name="MUTAG")
-        else:
+        elif dataset_name == "mutagenicity":
             dataset = TUDataset(root=dir, name="Mutagenicity")
+        else:
+            dataset = TUDataset(
+                root=dir, name="NCI1", transform=AddZeroEdgeAttr(args.emb_dim)
+            )  # pre_transform does not work for unknown reasons
         n_samples = len(dataset)
         indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
         train_indices = np.concatenate(
@@ -255,7 +259,7 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
     if args.model.lower() in ["dss", "ds"] and args.policy == "ego_nets_plus":
         node_feature_dims += [2, 2]
 
-    if not args.do_drop_feat and dataset_name != "csl":
+    if not args.do_drop_feat and dataset_name != "csl" and dataset_name != "nci1":
         if "zinc" in dataset_name:
             node_feature_dims.append(28)
             edge_feature_dims.append(4)
@@ -299,6 +303,9 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
             edge_encoder = EdgeEncoder(
                 emb_dim=args.emb_dim, feature_dims=edge_feature_dims
             )
+    elif dataset_name == "nci1":
+        node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[37])
+        edge_encoder = lambda x: x
     else:
         node_encoder, edge_encoder = lambda x: x, lambda x: x
 
@@ -462,7 +469,7 @@ def get_loss(dataset_name):
         loss = torch.nn.CrossEntropyLoss()
         metric = "mrr"
         metric_method = mrr_fct
-    elif dataset_name_lowercase in ["mutag", "mutagenicity"]:
+    elif dataset_name_lowercase in ["mutag", "mutagenicity", "nci1"]:
         loss = torch.nn.CrossEntropyLoss()
         metric = "accuracy"
     else:

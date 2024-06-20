@@ -18,7 +18,7 @@ def get_tracking_dict():
 def compute_loss_predictions(
     batch, model, metric, device, loss_fn, tracking_dict, prediction_type
 ):
-    MUTAG = False
+    MUTAG_NCI1 = False
     if batch.edge_attr is not None and len(batch.edge_attr.shape) == 1:
         batch.edge_attr = batch.edge_attr.view(-1, 1)
     # MUTAG or Mutagenicity
@@ -33,7 +33,11 @@ def compute_loss_predictions(
     ):
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
         batch.edge_attr = torch.argmax(batch.edge_attr, dim=1, keepdim=True)
-        MUTAG = True
+        MUTAG_NCI1 = True
+    # NCI1
+    elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
+        MUTAG_NCI1 = True
 
     batch = batch.to(device)
     predictions = model(batch)
@@ -43,7 +47,7 @@ def compute_loss_predictions(
     else:
         y = batch.y
 
-    if not MUTAG:
+    if not MUTAG_NCI1:
         nr_predictions = y.shape[0]
 
         if model.num_tasks == 1:
@@ -68,7 +72,7 @@ def compute_loss_predictions(
         else:
             loss = loss_fn(predictions, ground_truth)
     if metric == "accuracy":
-        if MUTAG:
+        if MUTAG_NCI1:
             tracking_dict["correct_classifications"] += torch.sum(
                 predictions.argmax(dim=1) == ground_truth
             ).item()
@@ -85,7 +89,6 @@ def compute_loss_predictions(
 
 
 def compute_embeddings(batch, model, device):
-    MUTAG = False
     if batch.edge_attr is not None and len(batch.edge_attr.shape) == 1:
         batch.edge_attr = batch.edge_attr.view(-1, 1)
     # MUTAG or Mutagenicity
@@ -100,7 +103,9 @@ def compute_embeddings(batch, model, device):
     ):
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
         batch.edge_attr = torch.argmax(batch.edge_attr, dim=1, keepdim=True)
-        MUTAG = True
+    # NCI1
+    elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
 
     batch = batch.to(device)
     embeddings = model.forward_to_pooling(batch)
