@@ -106,6 +106,8 @@ def main(args):
     print("Begin training.\n")
     time_start = time.time()
     train_results, val_results, test_results = [], [], []
+    best_val_params = None
+    best_val_metric = None
     for epoch in range(1, args.epochs + 1):
         print(f"Epoch {epoch}")
         train_result = train(
@@ -141,6 +143,10 @@ def main(args):
         train_results.append(train_result)
         val_results.append(val_result)
         test_results.append(test_result)
+
+        if best_val_params is None or val_result[eval_name] < best_val_metric:
+            best_val_params = model.state_dict()
+            best_val_metric = val_result[eval_name]
 
         print_progress(
             train_result["total_loss"],
@@ -219,16 +225,17 @@ def main(args):
         tracker.finish()
 
     # Save results
+    path = os.path.join(
+        config.RESULTS_PATH,
+        args.dataset,
+        args.model,
+        f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
+        f"fold{args.test_fold}",
+    )
     if args.save_rslt:
-        path = os.path.join(
-            config.RESULTS_PATH,
-            args.dataset,
-            args.model,
-            f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
-            f"fold{args.test_fold}",
-        )
         os.makedirs(path, exist_ok=True)
-        torch.save(model.state_dict(), os.path.join(path, "model.pt"))
+        torch.save(model.state_dict(), os.path.join(path, "model_last.pt"))
+        torch.save(best_val_params, os.path.join(path, "model_best.pt"))
         with open(os.path.join(path, "results.json"), "w") as f:
             json.dump(
                 {
@@ -261,6 +268,7 @@ def main(args):
         ) as f:
             json.dump(args.__dict__, f)
     if args.save_dist:
+        # Final results
         model.eval()
         embeddings = torch.cat(
             [
@@ -269,11 +277,24 @@ def main(args):
             ],
             dim=0,
         )
-        # L1/L2 distance
         dist_l1 = torch.cdist(embeddings, embeddings, p=1)
         dist_l2 = torch.cdist(embeddings, embeddings, p=2)
-        torch.save(dist_l1, os.path.join(path, "dist_l1.pt"))
-        torch.save(dist_l2, os.path.join(path, "dist_l2.pt"))
+        torch.save(dist_l1, os.path.join(path, "dist_l1_last.pt"))
+        torch.save(dist_l2, os.path.join(path, "dist_l2_last.pt"))
+        # Best results
+        model.load_state_dict(best_val_params)
+        model.eval()
+        embeddings = torch.cat(
+            [
+                compute_embeddings(batch, model, device).detach()
+                for batch in full_loader
+            ],
+            dim=0,
+        )
+        dist_l1 = torch.cdist(embeddings, embeddings, p=1)
+        dist_l2 = torch.cdist(embeddings, embeddings, p=2)
+        torch.save(dist_l1, os.path.join(path, "dist_l1_best.pt"))
+        torch.save(dist_l2, os.path.join(path, "dist_l2_best.pt"))
 
     return {
         "mode": mode,

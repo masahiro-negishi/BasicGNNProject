@@ -97,11 +97,13 @@ def load_dataset(args, config):
     # ZINC
     if dataset_name in ["zinc", "zinc_full"]:
         subset = "full" not in dataset_name
-        dataset = None
+        # dataset = None
         datasets = [
             ZINC(root=dir, subset=subset, split=split, pre_transform=transform)
             for split in ["train", "val", "test"]
         ]
+        # concat 3 datasets to get full dataset
+        dataset = torch.utils.data.ConcatDataset(datasets)
 
     # OGB graph level tasks
     elif dataset_name in [
@@ -205,14 +207,21 @@ def load_dataset(args, config):
         )
         eval_indices = indices[
             (args.test_fold * n_samples)
-            // args.k_fold : (args.test_fold + 1)
+            // args.k_fold : (2 * args.test_fold + 1)
+            * n_samples
+            // (2 * args.k_fold)
+        ]
+        test_indices = indices[
+            (2 * args.test_fold + 1)
+            * n_samples
+            // (2 * args.k_fold) : (args.test_fold + 1)
             * n_samples
             // args.k_fold
         ]
         datasets = [
             dataset[train_indices],
             dataset[eval_indices],
-            dataset[eval_indices],
+            dataset[test_indices],
         ]
     else:
         raise NotImplementedError("Unknown dataset")
