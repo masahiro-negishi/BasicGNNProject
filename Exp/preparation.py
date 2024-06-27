@@ -187,20 +187,25 @@ def load_dataset(args, config):
             dataset[indices["test"][0]],
         ]
 
-    # TU datasets
-    elif dataset_name in ["mutag", "mutagenicity", "nci1"]:
+    # TU datasets, Synthetic datasets
+    elif dataset_name in ["mutag", "mutagenicity", "nci1", "synthetic"]:
         if dataset_name == "mutag":
             dataset = TUDataset(root=dir, name="MUTAG")
         elif dataset_name == "mutagenicity":
             dataset = TUDataset(root=dir, name="Mutagenicity")
-        else:
+        elif dataset_name == "nci1":
             dataset = TUDataset(
                 root=dir, name="NCI1", transform=AddZeroEdgeAttr(args.emb_dim)
             )  # pre_transform does not work for unknown reasons
+        elif dataset_name == "synthetic":
+            dataset = torch.load(
+                os.path.join(config.DATA_PATH, args.dataset, "dataset.pt")
+            )
+
         n_samples = len(dataset)
         indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
         if args.train_with_all_data:
-            datasets = [dataset[indices], None, None]
+            datasets = [dataset, None, None]
         else:
             train_indices = np.concatenate(
                 (
@@ -283,7 +288,12 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
     if args.model.lower() in ["dss", "ds"] and args.policy == "ego_nets_plus":
         node_feature_dims += [2, 2]
 
-    if not args.do_drop_feat and dataset_name != "csl" and dataset_name != "nci1":
+    if (
+        not args.do_drop_feat
+        and dataset_name != "csl"
+        and dataset_name != "nci1"
+        and dataset_name != "synthetic"
+    ):
         if "zinc" in dataset_name:
             node_feature_dims.append(28)
             edge_feature_dims.append(4)
@@ -329,6 +339,9 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
             )
     elif dataset_name == "nci1":
         node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[37])
+        edge_encoder = lambda x: x
+    elif dataset_name == "synthetic":
+        node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[1])
         edge_encoder = lambda x: x
     else:
         node_encoder, edge_encoder = lambda x: x, lambda x: x
@@ -493,7 +506,7 @@ def get_loss(dataset_name):
         loss = torch.nn.CrossEntropyLoss()
         metric = "mrr"
         metric_method = mrr_fct
-    elif dataset_name_lowercase in ["mutag", "mutagenicity", "nci1"]:
+    elif dataset_name_lowercase in ["mutag", "mutagenicity", "nci1", "synthetic"]:
         loss = torch.nn.CrossEntropyLoss()
         metric = "accuracy"
     else:

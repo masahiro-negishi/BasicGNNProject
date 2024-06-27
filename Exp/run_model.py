@@ -46,9 +46,9 @@ def track_epoch(tracker, epoch, metric_name, train_result, val_result, test_resu
 
 
 def print_progress(
-    train_loss, val_loss, test_loss, metric_name, val_metric, test_metric
+    train_loss, val_loss, test_loss, metric_name, train_metric, val_metric, test_metric
 ):
-    print(f"\tTRAIN\t loss: {train_loss:6.4f}")
+    print(f"\tTRAIN\t loss: {train_loss:6.4f}\t {metric_name}: {train_metric:10.4f}")
     print(f"\tVAL\t loss: {val_loss:6.4f}\t  {metric_name}: {val_metric:10.4f}")
     print(f"\tTEST\t loss: {test_loss:6.4f}\t  {metric_name}: {test_metric:10.4f}")
 
@@ -69,10 +69,13 @@ def main(args):
 
     set_seed(args.seed)
     full_loader, train_loader, val_loader, test_loader = load_dataset(args, config)
-    num_classes, num_vertex_features = (
-        train_loader.dataset.num_classes,
-        train_loader.dataset.num_node_features,
-    )
+    if args.dataset == "synthetic":
+        num_classes, num_vertex_features = 2, 1
+    else:
+        num_classes, num_vertex_features = (
+            train_loader.dataset.num_classes,
+            train_loader.dataset.num_node_features,
+        )
     prediction_type = get_prediction_type(args.dataset.lower())
 
     if (
@@ -137,6 +140,7 @@ def main(args):
                 0,
                 0,
                 eval_name,
+                train_result[eval_name],
                 0,
                 0,
             )
@@ -171,6 +175,7 @@ def main(args):
                 val_result["total_loss"],
                 test_result["total_loss"],
                 eval_name,
+                train_result[eval_name],
                 val_result[eval_name],
                 test_result[eval_name],
             )
