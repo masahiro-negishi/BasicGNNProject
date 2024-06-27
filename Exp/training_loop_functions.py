@@ -91,6 +91,35 @@ def compute_loss_predictions(
     return loss
 
 
+def compute_predictions(batch, model, device, metric):
+    if batch.edge_attr is not None and len(batch.edge_attr.shape) == 1:
+        batch.edge_attr = batch.edge_attr.view(-1, 1)
+    # MUTAG or Mutagenicity
+    elif (
+        batch.x.shape[1] == 7
+        and batch.edge_attr is not None
+        and batch.edge_attr.shape[1] == 4
+    ) or (
+        batch.x.shape[1] == 14
+        and batch.edge_attr is not None
+        and batch.edge_attr.shape[1] == 3
+    ):
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
+        batch.edge_attr = torch.argmax(batch.edge_attr, dim=1, keepdim=True)
+    # NCI1
+    elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
+    # synthetic
+    elif batch.x.shape[1] == 1 and batch.edge_attr is None:
+        batch.edge_attr = torch.zeros((batch.edge_index.shape[1], model.emb_dim))
+    batch = batch.to(device)
+    predictions = model(batch)
+
+    if metric == "accuracy":
+        predictions = predictions.argmax(dim=1)
+    return predictions
+
+
 def compute_embeddings(batch, model, device):
     if batch.edge_attr is not None and len(batch.edge_attr.shape) == 1:
         batch.edge_attr = batch.edge_attr.view(-1, 1)

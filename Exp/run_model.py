@@ -19,7 +19,13 @@ from Exp.preparation import (
     get_prediction_type,
     load_dataset,
 )
-from Exp.training_loop_functions import compute_embeddings, eval, step_scheduler, train
+from Exp.training_loop_functions import (
+    compute_embeddings,
+    compute_predictions,
+    eval,
+    step_scheduler,
+    train,
+)
 from Misc.config import config
 from Misc.tracking import get_tracker
 from Misc.utils import list_of_dictionary_to_dictionary_of_lists
@@ -268,6 +274,17 @@ def main(args):
         os.makedirs(path, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(path, "model_last.pt"))
         if args.train_with_all_data:
+            # Final predictions
+            if args.train_with_all_data:
+                model.eval()
+                predictions = []
+                for batch in full_loader:
+                    predictions.append(
+                        compute_predictions(batch, model, device, eval_name)
+                    )
+                torch.save(
+                    torch.cat(predictions, dim=0), os.path.join(path, "predictions.pt")
+                )
             rslt = {
                 "runtime_hours": runtime,
                 "epochs": epoch,
