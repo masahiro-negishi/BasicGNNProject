@@ -45,6 +45,11 @@ def add_general_arguments(parser):
         default=config.use_tracking,
         help=f"If 0 runs without tracking (Default: {str(config.use_tracking)})",
     )
+    parser.add_argument(
+        "--train_with_all_data",
+        action="store_true",
+        help="Train with all data (default: False)",
+    )
 
 
 def add_training_arguments(parser):

@@ -199,30 +199,33 @@ def load_dataset(args, config):
             )  # pre_transform does not work for unknown reasons
         n_samples = len(dataset)
         indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
-        train_indices = np.concatenate(
-            (
-                indices[: (args.test_fold * n_samples) // args.k_fold],
-                indices[(args.test_fold + 1) * n_samples // args.k_fold :],
+        if args.train_with_all_data:
+            datasets = [dataset[indices], None, None]
+        else:
+            train_indices = np.concatenate(
+                (
+                    indices[: (args.test_fold * n_samples) // args.k_fold],
+                    indices[(args.test_fold + 1) * n_samples // args.k_fold :],
+                )
             )
-        )
-        eval_indices = indices[
-            (args.test_fold * n_samples)
-            // args.k_fold : (2 * args.test_fold + 1)
-            * n_samples
-            // (2 * args.k_fold)
-        ]
-        test_indices = indices[
-            (2 * args.test_fold + 1)
-            * n_samples
-            // (2 * args.k_fold) : (args.test_fold + 1)
-            * n_samples
-            // args.k_fold
-        ]
-        datasets = [
-            dataset[train_indices],
-            dataset[eval_indices],
-            dataset[test_indices],
-        ]
+            eval_indices = indices[
+                (args.test_fold * n_samples)
+                // args.k_fold : (2 * args.test_fold + 1)
+                * n_samples
+                // (2 * args.k_fold)
+            ]
+            test_indices = indices[
+                (2 * args.test_fold + 1)
+                * n_samples
+                // (2 * args.k_fold) : (args.test_fold + 1)
+                * n_samples
+                // args.k_fold
+            ]
+            datasets = [
+                dataset[train_indices],
+                dataset[eval_indices],
+                dataset[test_indices],
+            ]
     else:
         raise NotImplementedError("Unknown dataset")
 
@@ -247,9 +250,21 @@ def load_dataset(args, config):
             follow_batch=["subgraph_idx"],
         )
     else:
-        train_loader = DataLoader(datasets[0], batch_size=args.batch_size, shuffle=True)
-        val_loader = DataLoader(datasets[1], batch_size=args.batch_size, shuffle=False)
-        test_loader = DataLoader(datasets[2], batch_size=args.batch_size, shuffle=False)
+        if args.train_with_all_data:
+            train_loader = DataLoader(
+                datasets[0], batch_size=args.batch_size, shuffle=True
+            )
+            val_loader, test_loader = None, None
+        else:
+            train_loader = DataLoader(
+                datasets[0], batch_size=args.batch_size, shuffle=True
+            )
+            val_loader = DataLoader(
+                datasets[1], batch_size=args.batch_size, shuffle=False
+            )
+            test_loader = DataLoader(
+                datasets[2], batch_size=args.batch_size, shuffle=False
+            )
 
     if dataset is not None:
         full_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)

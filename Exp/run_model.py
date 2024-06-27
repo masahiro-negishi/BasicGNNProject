@@ -9,6 +9,7 @@ import time
 
 import numpy as np
 import torch
+import torch.ao.quantization
 
 from Exp.parser import parse_args
 from Exp.preparation import (
@@ -57,6 +58,14 @@ def main(args):
     device = args.device
     use_tracking = args.use_tracking
     dataset_name = args.dataset
+
+    if args.train_with_all_data:
+        assert (
+            args.scheduler != "ReduceLROnPlateau"
+        ), "Cannot use ReduceLROnPlateau without val set"
+        assert args.tracking == 0, "Cannot use tracking without val set"
+        assert args.k_fold == 1, "Cannot use k-fold without val set"
+        assert args.test_fold == 0, "Cannot use test fold without val set"
 
     set_seed(args.seed)
     full_loader, train_loader, val_loader, test_loader = load_dataset(args, config)
@@ -121,41 +130,50 @@ def main(args):
             metric_method=metric_method,
             prediction_type=prediction_type,
         )
-        val_result = eval(
-            model,
-            device,
-            val_loader,
-            loss_fct,
-            eval_name,
-            metric_method=metric_method,
-            prediction_type=prediction_type,
-        )
-        test_result = eval(
-            model,
-            device,
-            test_loader,
-            loss_fct,
-            eval_name,
-            metric_method=metric_method,
-            prediction_type=prediction_type,
-        )
-
         train_results.append(train_result)
-        val_results.append(val_result)
-        test_results.append(test_result)
+        if args.train_with_all_data:
+            print_progress(
+                train_result["total_loss"],
+                0,
+                0,
+                eval_name,
+                0,
+                0,
+            )
+        else:
+            val_result = eval(
+                model,
+                device,
+                val_loader,
+                loss_fct,
+                eval_name,
+                metric_method=metric_method,
+                prediction_type=prediction_type,
+            )
+            test_result = eval(
+                model,
+                device,
+                test_loader,
+                loss_fct,
+                eval_name,
+                metric_method=metric_method,
+                prediction_type=prediction_type,
+            )
+            val_results.append(val_result)
+            test_results.append(test_result)
 
-        if best_val_params is None or val_result[eval_name] < best_val_metric:
-            best_val_params = model.state_dict()
-            best_val_metric = val_result[eval_name]
+            if best_val_params is None or val_result[eval_name] < best_val_metric:
+                best_val_params = model.state_dict()
+                best_val_metric = val_result[eval_name]
 
-        print_progress(
-            train_result["total_loss"],
-            val_result["total_loss"],
-            test_result["total_loss"],
-            eval_name,
-            val_result[eval_name],
-            test_result[eval_name],
-        )
+            print_progress(
+                train_result["total_loss"],
+                val_result["total_loss"],
+                test_result["total_loss"],
+                eval_name,
+                val_result[eval_name],
+                test_result[eval_name],
+            )
 
         if use_tracking:
             track_epoch(
@@ -168,7 +186,11 @@ def main(args):
                 optimizer.param_groups[0]["lr"],
             )
 
-        step_scheduler(scheduler, args.scheduler, val_result["total_loss"])
+        step_scheduler(
+            scheduler,
+            args.scheduler,
+            val_result["total_loss"] if not args.train_with_all_data else None,
+        )
 
         # EXIT CONDITIONS
         if (
@@ -185,31 +207,35 @@ def main(args):
 
     # Final result
     train_results = list_of_dictionary_to_dictionary_of_lists(train_results)
-    val_results = list_of_dictionary_to_dictionary_of_lists(val_results)
-    test_results = list_of_dictionary_to_dictionary_of_lists(test_results)
+    if not args.train_with_all_data:
+        val_results = list_of_dictionary_to_dictionary_of_lists(val_results)
+        test_results = list_of_dictionary_to_dictionary_of_lists(test_results)
 
-    if eval_name in ["mae", "rmse (ogb)"]:
-        best_val_epoch = np.argmin(val_results[eval_name])
-        mode = "min"
-    else:
-        best_val_epoch = np.argmax(val_results[eval_name])
-        mode = "max"
+        if eval_name in ["mae", "rmse (ogb)"]:
+            best_val_epoch = np.argmin(val_results[eval_name])
+            mode = "min"
+        else:
+            best_val_epoch = np.argmax(val_results[eval_name])
+            mode = "max"
 
-    loss_train, loss_val, loss_test = (
-        train_results["total_loss"][best_val_epoch],
-        val_results["total_loss"][best_val_epoch],
-        test_results["total_loss"][best_val_epoch],
-    )
-    results_train, result_val, result_test = (
-        train_results[eval_name][best_val_epoch],
-        val_results[eval_name][best_val_epoch],
-        test_results[eval_name][best_val_epoch],
-    )
+        loss_train, loss_val, loss_test = (
+            train_results["total_loss"][best_val_epoch],
+            val_results["total_loss"][best_val_epoch],
+            test_results["total_loss"][best_val_epoch],
+        )
+        results_train, result_val, result_test = (
+            train_results[eval_name][best_val_epoch],
+            val_results[eval_name][best_val_epoch],
+            test_results[eval_name][best_val_epoch],
+        )
 
     print("\n\nFinal Result:")
     print(f"\tRuntime: {runtime:.2f}h")
-    print(f"\tBest epoch {best_val_epoch} / {args.epochs}")
-    print_progress(loss_train, loss_val, loss_test, eval_name, result_val, result_test)
+    if not args.train_with_all_data:
+        print(f"\tBest epoch {best_val_epoch} / {args.epochs}")
+        print_progress(
+            loss_train, loss_val, loss_test, eval_name, result_val, result_test
+        )
 
     if use_tracking:
         tracker.log(
@@ -227,6 +253,7 @@ def main(args):
     # Save results
     path = os.path.join(
         config.RESULTS_PATH,
+        "nosplit" if args.train_with_all_data else "split",
         args.dataset,
         args.model,
         f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
@@ -235,30 +262,37 @@ def main(args):
     if args.save_rslt:
         os.makedirs(path, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(path, "model_last.pt"))
-        torch.save(best_val_params, os.path.join(path, "model_best.pt"))
+        if args.train_with_all_data:
+            rslt = {
+                "runtime_hours": runtime,
+                "epochs": epoch,
+                "parameters": nr_parameters,
+                "details_train": train_results,
+            }
+        else:
+            torch.save(best_val_params, os.path.join(path, "model_best.pt"))
+            rslt = {
+                "mode": mode,
+                "loss_train": loss_train,
+                "loss_val": loss_val,
+                "loss_test": loss_test,
+                "train": results_train,
+                "val": result_val,
+                "test": result_test,
+                "runtime_hours": runtime,
+                "epochs": epoch,
+                "best_val_epoch": int(best_val_epoch),
+                "parameters": nr_parameters,
+                "details_train": train_results,
+                "details_val": val_results,
+                "details_test": test_results,
+            }
         with open(os.path.join(path, "results.json"), "w") as f:
-            json.dump(
-                {
-                    "mode": mode,
-                    "loss_train": loss_train,
-                    "loss_val": loss_val,
-                    "loss_test": loss_test,
-                    "train": results_train,
-                    "val": result_val,
-                    "test": result_test,
-                    "runtime_hours": runtime,
-                    "epochs": epoch,
-                    "best_val_epoch": int(best_val_epoch),
-                    "parameters": nr_parameters,
-                    "details_train": train_results,
-                    "details_val": val_results,
-                    "details_test": test_results,
-                },
-                f,
-            )
+            json.dump(rslt, f)
         with open(
             os.path.join(
                 config.RESULTS_PATH,
+                "nosplit" if args.train_with_all_data else "split",
                 args.dataset,
                 args.model,
                 f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
@@ -279,39 +313,25 @@ def main(args):
         )
         dist_l1 = torch.cdist(embeddings, embeddings, p=1)
         dist_l2 = torch.cdist(embeddings, embeddings, p=2)
-        torch.save(dist_l1, os.path.join(path, "dist_l1_last.pt"))
-        torch.save(dist_l2, os.path.join(path, "dist_l2_last.pt"))
+        torch.save(dist_l1.to(torch.float16), os.path.join(path, "dist_l1_last.pt"))
+        torch.save(dist_l2.to(torch.float16), os.path.join(path, "dist_l2_last.pt"))
         # Best results
-        model.load_state_dict(best_val_params)
-        model.eval()
-        embeddings = torch.cat(
-            [
-                compute_embeddings(batch, model, device).detach()
-                for batch in full_loader
-            ],
-            dim=0,
-        )
-        dist_l1 = torch.cdist(embeddings, embeddings, p=1)
-        dist_l2 = torch.cdist(embeddings, embeddings, p=2)
-        torch.save(dist_l1, os.path.join(path, "dist_l1_best.pt"))
-        torch.save(dist_l2, os.path.join(path, "dist_l2_best.pt"))
+        if not args.train_with_all_data:
+            model.load_state_dict(best_val_params)
+            model.eval()
+            embeddings = torch.cat(
+                [
+                    compute_embeddings(batch, model, device).detach()
+                    for batch in full_loader
+                ],
+                dim=0,
+            )
+            dist_l1 = torch.cdist(embeddings, embeddings, p=1)
+            dist_l2 = torch.cdist(embeddings, embeddings, p=2)
+            torch.save(dist_l1.to(torch.float16), os.path.join(path, "dist_l1_best.pt"))
+            torch.save(dist_l2.to(torch.float16), os.path.join(path, "dist_l2_best.pt"))
 
-    return {
-        "mode": mode,
-        "loss_train": loss_train,
-        "loss_val": loss_val,
-        "loss_test": loss_test,
-        "train": results_train,
-        "val": result_val,
-        "test": result_test,
-        "runtime_hours": runtime,
-        "epochs": epoch,
-        "best_val_epoch": int(best_val_epoch),
-        "parameters": nr_parameters,
-        "details_train": train_results,
-        "details_val": val_results,
-        "details_test": test_results,
-    }
+    return None
 
 
 def run(passed_args=None):
