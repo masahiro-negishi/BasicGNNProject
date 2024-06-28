@@ -202,11 +202,11 @@ def load_dataset(args, config):
                 os.path.join(config.DATA_PATH, args.dataset, "dataset.pt")
             )
 
-        n_samples = len(dataset)
-        indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
         if args.train_with_all_data:
             datasets = [dataset, None, None]
         else:
+            n_samples = len(dataset)
+            indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
             train_indices = np.concatenate(
                 (
                     indices[: (args.test_fold * n_samples) // args.k_fold],

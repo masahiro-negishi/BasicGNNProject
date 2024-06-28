@@ -275,16 +275,13 @@ def main(args):
         torch.save(model.state_dict(), os.path.join(path, "model_last.pt"))
         if args.train_with_all_data:
             # Final predictions
-            if args.train_with_all_data:
-                model.eval()
-                predictions = []
-                for batch in full_loader:
-                    predictions.append(
-                        compute_predictions(batch, model, device, eval_name)
-                    )
-                torch.save(
-                    torch.cat(predictions, dim=0), os.path.join(path, "predictions.pt")
-                )
+            model.eval()
+            predictions = []
+            for batch in full_loader:
+                predictions.append(compute_predictions(batch, model, device, eval_name))
+            torch.save(
+                torch.cat(predictions, dim=0), os.path.join(path, "predictions.pt")
+            )
             rslt = {
                 "runtime_hours": runtime,
                 "epochs": epoch,
