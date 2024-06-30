@@ -38,7 +38,7 @@ def compute_loss_predictions(
     elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
         MUTAG_NCI1_Synthetic = True
-    # synthetic
+    # synthetic_cls or synthetic_reg
     elif batch.x.shape[1] == 1 and batch.edge_attr is None:
         batch.edge_attr = torch.zeros((batch.edge_index.shape[1], model.emb_dim))
         MUTAG_NCI1_Synthetic = True
@@ -66,8 +66,10 @@ def compute_loss_predictions(
         if y.dtype == torch.int64:
             y = y.float()
     ground_truth = y
-
     if metric in ["accuracy"]:
+        loss = loss_fn(predictions, ground_truth)
+    elif metric == "mae" and MUTAG_NCI1_Synthetic:
+        ground_truth = ground_truth.reshape(-1, 1)
         loss = loss_fn(predictions, ground_truth)
     else:
         if is_labeled.shape == predictions.shape:
@@ -109,7 +111,7 @@ def compute_predictions(batch, model, device, metric):
     # NCI1
     elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
-    # synthetic
+    # synthetic_cls or synthetic_reg
     elif batch.x.shape[1] == 1 and batch.edge_attr is None:
         batch.edge_attr = torch.zeros((batch.edge_index.shape[1], model.emb_dim))
     batch = batch.to(device)
@@ -138,7 +140,7 @@ def compute_embeddings(batch, model, device):
     # NCI1
     elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
-    # synthetic
+    # synthetic_cls or synthetic_reg
     elif batch.x.shape[1] == 1 and batch.edge_attr is None:
         batch.edge_attr = torch.zeros((batch.edge_index.shape[1], model.emb_dim))
 
