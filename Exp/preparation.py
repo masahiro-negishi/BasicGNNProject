@@ -102,8 +102,11 @@ def load_dataset(args, config):
             ZINC(root=dir, subset=subset, split=split, pre_transform=transform)
             for split in ["train", "val", "test"]
         ]
-        # concat 3 datasets to get full dataset
-        dataset = torch.utils.data.ConcatDataset(datasets)
+        if args.train_with_all_data:
+            dataset = datasets[0]
+        else:
+            # concat 3 datasets to get full dataset
+            dataset = torch.utils.data.ConcatDataset(datasets)
 
     # OGB graph level tasks
     elif dataset_name in [
