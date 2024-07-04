@@ -75,8 +75,10 @@ def main(args):
 
     set_seed(args.seed)
     full_loader, train_loader, val_loader, test_loader = load_dataset(args, config)
-    if args.dataset == "synthetic_cls":
+    if args.dataset == "synthetic_bin":
         num_classes, num_vertex_features = 2, 1
+    elif args.dataset == "synthetic_mul":
+        num_classes, num_vertex_features = 3, 1
     elif args.dataset == "synthetic_reg":
         num_classes, num_vertex_features = 1, 1
     else:

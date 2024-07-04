@@ -128,12 +128,15 @@ def load_dataset(args, config):
         dataset = PygGraphPropPredDataset(
             root=dir, name=args.dataset.lower(), pre_transform=transform
         )
-        split_idx = dataset.get_idx_split()
-        datasets = [
-            dataset[split_idx["train"]],
-            dataset[split_idx["valid"]],
-            dataset[split_idx["test"]],
-        ]
+        if args.train_with_all_data:
+            datasets = [dataset, None, None]
+        else:
+            split_idx = dataset.get_idx_split()
+            datasets = [
+                dataset[split_idx["train"]],
+                dataset[split_idx["valid"]],
+                dataset[split_idx["test"]],
+            ]
 
     # Cyclic Skip Link dataset
     elif dataset_name == "csl":
@@ -190,12 +193,13 @@ def load_dataset(args, config):
             dataset[indices["test"][0]],
         ]
 
-    # TU datasets, Synthetic_cls datasets
+    # TU datasets, synthetic datasets
     elif dataset_name in [
         "mutag",
         "mutagenicity",
         "nci1",
-        "synthetic_cls",
+        "synthetic_bin",
+        "synthetic_mul",
         "synthetic_reg",
     ]:
         if dataset_name == "mutag":
@@ -206,7 +210,7 @@ def load_dataset(args, config):
             dataset = TUDataset(
                 root=dir, name="NCI1", transform=AddZeroEdgeAttr(args.emb_dim)
             )  # pre_transform does not work for unknown reasons
-        elif dataset_name in ["synthetic_cls", "synthetic_reg"]:
+        elif dataset_name in ["synthetic_bin", "synthetic_mul", "synthetic_reg"]:
             dataset = torch.load(
                 os.path.join(config.DATA_PATH, args.dataset, "dataset.pt")
             )
@@ -297,13 +301,13 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
     if args.model.lower() in ["dss", "ds"] and args.policy == "ego_nets_plus":
         node_feature_dims += [2, 2]
 
-    if (
-        not args.do_drop_feat
-        and dataset_name != "csl"
-        and dataset_name != "nci1"
-        and dataset_name != "synthetic_cls"
-        and dataset_name != "synthetic_reg"
-    ):
+    if not args.do_drop_feat and dataset_name not in [
+        "csl",
+        "nci1",
+        "synthetic_bin",
+        "synthetic_mul",
+        "synthetic_reg",
+    ]:
         if "zinc" in dataset_name:
             node_feature_dims.append(28)
             edge_feature_dims.append(4)
@@ -350,8 +354,11 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
     elif dataset_name == "nci1":
         node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[37])
         edge_encoder = lambda x: x
-    elif dataset_name in ["synthetic_cls", "synthetic_reg"]:
+    elif dataset_name in ["synthetic_bin", "synthetic_reg"]:
         node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[1])
+        edge_encoder = lambda x: x
+    elif dataset_name == "synthetic_mul":
+        node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[2])
         edge_encoder = lambda x: x
     else:
         node_encoder, edge_encoder = lambda x: x, lambda x: x
@@ -517,7 +524,13 @@ def get_loss(dataset_name):
         loss = torch.nn.CrossEntropyLoss()
         metric = "mrr"
         metric_method = mrr_fct
-    elif dataset_name_lowercase in ["mutag", "mutagenicity", "nci1", "synthetic_cls"]:
+    elif dataset_name_lowercase in [
+        "mutag",
+        "mutagenicity",
+        "nci1",
+        "synthetic_bin",
+        "synthetic_mul",
+    ]:
         loss = torch.nn.CrossEntropyLoss()
         metric = "accuracy"
     else:
