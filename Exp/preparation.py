@@ -21,6 +21,7 @@ from torch_geometric.transforms import Compose, OneHotDegree  # type: ignore
 from torchmetrics import F1Score
 
 from Misc.add_zero_edge_attr import AddZeroEdgeAttr
+from Misc.add_zero_node_attr import AddZeroNodeAttr
 from Misc.cosine_scheduler import get_cosine_schedule_with_warmup
 from Misc.drop_features import DropFeatures
 from Misc.pad_node_attr import PadNodeAttr
@@ -198,6 +199,9 @@ def load_dataset(args, config):
         "mutag",
         "mutagenicity",
         "nci1",
+        "enzymes",
+        "imdb-multi",
+        "collab",
         "synthetic_bin",
         "synthetic_mul",
         "synthetic_reg",
@@ -206,10 +210,18 @@ def load_dataset(args, config):
             dataset = TUDataset(root=dir, name="MUTAG")
         elif dataset_name == "mutagenicity":
             dataset = TUDataset(root=dir, name="Mutagenicity")
-        elif dataset_name == "nci1":
+        elif dataset_name in ["nci1", "enzymes"]:
             dataset = TUDataset(
-                root=dir, name="NCI1", transform=AddZeroEdgeAttr(args.emb_dim)
+                root=dir,
+                name="NCI1" if dataset_name == "nci1" else "ENZYMES",
+                transform=AddZeroEdgeAttr(args.emb_dim),
             )  # pre_transform does not work for unknown reasons
+        elif dataset_name in ["imdb-multi", "collab"]:
+            dataset = TUDataset(
+                root=dir,
+                name="IMDB-MULTI" if dataset_name == "imdb-multi" else "COLLAB",
+                transform=Compose([AddZeroEdgeAttr(args.emb_dim), AddZeroNodeAttr(1)]),
+            )
         elif dataset_name in ["synthetic_bin", "synthetic_mul", "synthetic_reg"]:
             dataset = torch.load(
                 os.path.join(config.DATA_PATH, args.dataset, "dataset.pt")
@@ -304,6 +316,9 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
     if not args.do_drop_feat and dataset_name not in [
         "csl",
         "nci1",
+        "enzymes",
+        "imdb-multi",
+        "collab",
         "synthetic_bin",
         "synthetic_mul",
         "synthetic_reg",
@@ -353,6 +368,12 @@ def get_model(args, num_classes, num_vertex_features, num_tasks):
             )
     elif dataset_name == "nci1":
         node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[37])
+        edge_encoder = lambda x: x
+    elif dataset_name == "enzymes":
+        node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[3])
+        edge_encoder = lambda x: x
+    elif dataset_name in ["imdb-multi", "collab"]:
+        node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[1])
         edge_encoder = lambda x: x
     elif dataset_name in ["synthetic_bin", "synthetic_reg"]:
         node_encoder = NodeEncoder(emb_dim=args.emb_dim, feature_dims=[1])
@@ -528,6 +549,9 @@ def get_loss(dataset_name):
         "mutag",
         "mutagenicity",
         "nci1",
+        "enzymes",
+        "imdb-multi",
+        "collab",
         "synthetic_bin",
         "synthetic_mul",
     ]:

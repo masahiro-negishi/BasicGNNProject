@@ -18,7 +18,7 @@ def get_tracking_dict():
 def compute_loss_predictions(
     batch, model, metric, device, loss_fn, tracking_dict, prediction_type
 ):
-    MUTAG_NCI1_Synthetic = False
+    TU_Synthetic = False
     if batch.edge_attr is not None and len(batch.edge_attr.shape) == 1:
         batch.edge_attr = batch.edge_attr.view(-1, 1)
     # MUTAG or Mutagenicity
@@ -33,15 +33,22 @@ def compute_loss_predictions(
     ):
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
         batch.edge_attr = torch.argmax(batch.edge_attr, dim=1, keepdim=True)
-        MUTAG_NCI1_Synthetic = True
+        TU_Synthetic = True
     # NCI1
     elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
-        MUTAG_NCI1_Synthetic = True
+        TU_Synthetic = True
+    # ENZYMES
+    elif batch.x.shape[1] == 3 and batch.edge_attr is not None:
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
+        TU_Synthetic = True
+    # IMDB-Multi, COLLAB
+    elif batch.x.shape[1] == 1 and batch.edge_attr is not None:
+        TU_Synthetic = True
     # synthetic
     elif batch.x.shape[1] == 1 and batch.edge_attr is None:
         batch.edge_attr = torch.zeros((batch.edge_index.shape[1], model.emb_dim))
-        MUTAG_NCI1_Synthetic = True
+        TU_Synthetic = True
     batch = batch.to(device)
     predictions = model(batch)
 
@@ -50,7 +57,7 @@ def compute_loss_predictions(
     else:
         y = batch.y
 
-    if not MUTAG_NCI1_Synthetic:
+    if not TU_Synthetic:
         nr_predictions = y.shape[0]
 
         if model.num_tasks == 1:
@@ -68,7 +75,7 @@ def compute_loss_predictions(
     ground_truth = y
     if metric in ["accuracy"]:
         loss = loss_fn(predictions, ground_truth)
-    elif metric == "mae" and MUTAG_NCI1_Synthetic:
+    elif metric == "mae" and TU_Synthetic:
         ground_truth = ground_truth.reshape(-1, 1)
         loss = loss_fn(predictions, ground_truth)
     else:
@@ -77,7 +84,7 @@ def compute_loss_predictions(
         else:
             loss = loss_fn(predictions, ground_truth)
     if metric == "accuracy":
-        if MUTAG_NCI1_Synthetic:
+        if TU_Synthetic:
             tracking_dict["correct_classifications"] += torch.sum(
                 predictions.argmax(dim=1) == ground_truth
             ).item()
@@ -111,6 +118,9 @@ def compute_predictions(batch, model, device, metric):
     # NCI1
     elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
+    # ENZYMES
+    elif batch.x.shape[1] == 3 and batch.edge_attr is not None:
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
     # synthetic
     elif batch.x.shape[1] == 1 and batch.edge_attr is None:
         batch.edge_attr = torch.zeros((batch.edge_index.shape[1], model.emb_dim))
@@ -139,6 +149,9 @@ def compute_embeddings(batch, model, device):
         batch.edge_attr = torch.argmax(batch.edge_attr, dim=1, keepdim=True)
     # NCI1
     elif batch.x.shape[1] == 37 and batch.edge_attr is not None:
+        batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
+    # ENZYMES
+    elif batch.x.shape[1] == 3 and batch.edge_attr is not None:
         batch.x = torch.argmax(batch.x, dim=1, keepdim=True)
     # synthetic
     elif batch.x.shape[1] == 1 and batch.edge_attr is None:
