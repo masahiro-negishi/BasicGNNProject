@@ -238,7 +238,7 @@ def main(args):
             val_results["total_loss"][best_val_epoch],
             test_results["total_loss"][best_val_epoch],
         )
-        results_train, result_val, result_test = (
+        result_train, result_val, result_test = (
             train_results[eval_name][best_val_epoch],
             val_results[eval_name][best_val_epoch],
             test_results[eval_name][best_val_epoch],
@@ -249,7 +249,13 @@ def main(args):
     if not args.train_with_all_data:
         print(f"\tBest epoch {best_val_epoch} / {args.epochs}")
         print_progress(
-            loss_train, loss_val, loss_test, eval_name, result_val, result_test
+            loss_train,
+            loss_val,
+            loss_test,
+            eval_name,
+            result_train,
+            result_val,
+            result_test,
         )
 
     if use_tracking:
@@ -299,7 +305,7 @@ def main(args):
                 "loss_train": loss_train,
                 "loss_val": loss_val,
                 "loss_test": loss_test,
-                "train": results_train,
+                "train": result_train,
                 "val": result_val,
                 "test": result_test,
                 "runtime_hours": runtime,
