@@ -12,3 +12,4 @@ wandb
 networkx
 torchmetrics
 types-PyYAML
+seaborn==0.13.2
