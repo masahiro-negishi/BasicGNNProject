@@ -168,6 +168,8 @@ def neighbors_correspondence_TUDataset(
             dist_mat = torch.load(
                 os.path.join(dirpath, f"fold{fold}", f"dist_{metric}_best.pt")
             )
+            # set diagonal to inf
+            dist_mat.fill_diagonal_(float("inf"))
             # train
             dist_mat_train = dist_mat[train_indices][:, train_indices]
             _, train_indices_sorted = torch.sort(dist_mat_train, dim=1)
@@ -177,9 +179,7 @@ def neighbors_correspondence_TUDataset(
                 anchor_class[anchor] = dataset[train_indices[anchor]].y
                 for k in range(max(ks)):
                     neighbor_classes[anchor][k] = dataset[
-                        train_indices[
-                            train_indices_sorted[anchor][k + 1]
-                        ]  # not regard itself as neighbor
+                        train_indices[train_indices_sorted[anchor][k]]
                     ].y
             corresp = neighbor_classes == anchor_class.unsqueeze(1)
             for kidx, k in enumerate(ks):
@@ -198,9 +198,7 @@ def neighbors_correspondence_TUDataset(
                 anchor_class[anchor] = dataset[test_indices[anchor]].y
                 for k in range(max(ks)):
                     neighbor_classes[anchor][k] = dataset[
-                        test_indices[
-                            test_indices_sorted[anchor][k + 1]
-                        ]  # not regard itself as neighbor
+                        test_indices[test_indices_sorted[anchor][k]]
                     ].y
             corresp = neighbor_classes == anchor_class.unsqueeze(1)
             for kidx, k in enumerate(ks):
@@ -266,22 +264,35 @@ def neighbors_correspondence_ZINC(
     keep_test = torch.zeros((len(metrics), len(ks)))
     for midx, metric in enumerate(metrics):
         dist_mat = torch.load(os.path.join(dirpath, f"fold0", f"dist_{metric}_best.pt"))
+        # set diagonal to inf
+        dist_mat.fill_diagonal_(float("inf"))
         # train
         dist_mat_train = dist_mat[:10000][:, :10000]
         _, train_indices_sorted = torch.sort(dist_mat_train, dim=1)
         anchor_y = torch.zeros(10000)
         neighbor_y = torch.zeros(10000, max(ks))
+        ymax, ymin = -float("inf"), float("inf")
         for anchor in range(10000):
             anchor_y[anchor] = train_dataset[anchor].y
+            ymax = max(ymax, anchor_y[anchor].item())
+            ymin = min(ymin, anchor_y[anchor].item())
             for k in range(max(ks)):
-                neighbor_y[anchor][k] = train_dataset[
-                    train_indices_sorted[anchor][k + 1]  # not regard itself as neighbor
-                ].y
+                neighbor_y[anchor][k] = train_dataset[train_indices_sorted[anchor][k]].y
         for kidx, k in enumerate(ks):
             keep_train[midx, kidx] = torch.mean(
-                torch.abs(neighbor_y[:, :k].sum(dim=1) / k - anchor_y)
+                (
+                    1
+                    - torch.abs(anchor_y.reshape(-1, 1) - neighbor_y[:, :k])
+                    / (ymax - ymin)
+                ).sum(dim=1)
+                / k
                 - torch.sum(
-                    torch.abs(anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1)), dim=1
+                    (
+                        1
+                        - torch.abs(anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1))
+                        / (ymax - ymin)
+                    ),
+                    dim=1,
                 )
                 / (len(anchor_y) - 1)
             ).item()
@@ -290,17 +301,28 @@ def neighbors_correspondence_ZINC(
         _, test_indices_sorted = torch.sort(dist_mat_test, dim=1)
         anchor_y = torch.zeros(1000)
         neighbor_y = torch.zeros(1000, max(ks))
+        ymax, ymin = -float("inf"), float("inf")
         for anchor in range(1000):
             anchor_y[anchor] = test_dataset[anchor].y
+            ymax = max(ymax, anchor_y[anchor].item())
+            ymin = min(ymin, anchor_y[anchor].item())
             for k in range(max(ks)):
-                neighbor_y[anchor][k] = test_dataset[
-                    test_indices_sorted[anchor][k + 1]  # not regard itself as neighbor
-                ].y
+                neighbor_y[anchor][k] = test_dataset[test_indices_sorted[anchor][k]].y
         for kidx, k in enumerate(ks):
             keep_test[midx, kidx] = torch.mean(
-                torch.abs(neighbor_y[:, :k].sum(dim=1) / k - anchor_y)
+                (
+                    1
+                    - torch.abs(anchor_y.reshape(-1, 1) - neighbor_y[:, :k])
+                    / (ymax - ymin)
+                ).sum(dim=1)
+                / k
                 - torch.sum(
-                    torch.abs(anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1)), dim=1
+                    (
+                        1
+                        - torch.abs(anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1))
+                        / (ymax - ymin)
+                    ),
+                    dim=1,
                 )
                 / (len(anchor_y) - 1)
             ).item()
@@ -407,29 +429,21 @@ def neighbor_acc_plot(
                 for kidx, k in enumerate(ks):
                     for cidx, cand in enumerate(cands):
                         if color == "model":
-                            axes[kidx, meidx * 3 + tidx].scatter(
-                                neighbors[xidx, meidx, kidx, cidx].flatten(),
-                                mets[yidx, cidx].flatten(),
-                                label=f"{cand}",
-                            )
+                            xs = neighbors[xidx, meidx, kidx, cidx].flatten()
+                            ys = mets[yidx, cidx].flatten()
                         elif color == "layer":
-                            axes[kidx, meidx * 3 + tidx].scatter(
-                                neighbors[xidx, meidx, kidx, :, cidx].flatten(),
-                                mets[yidx, :, cidx].flatten(),
-                                label=f"{cand}",
-                            )
+                            xs = neighbors[xidx, meidx, kidx, :, cidx].flatten()
+                            ys = mets[yidx, :, cidx].flatten()
                         elif color == "emb_dim":
-                            axes[kidx, meidx * 3 + tidx].scatter(
-                                neighbors[xidx, meidx, kidx, :, :, cidx].flatten(),
-                                mets[yidx, :, :, cidx].flatten(),
-                                label=f"{cand}",
-                            )
+                            xs = neighbors[xidx, meidx, kidx, :, :, cidx].flatten()
+                            ys = mets[yidx, :, :, cidx].flatten()
                         elif color == "pooling":
-                            axes[kidx, meidx * 3 + tidx].scatter(
-                                neighbors[xidx, meidx, kidx, :, :, :, cidx].flatten(),
-                                mets[yidx, :, :, :, cidx].flatten(),
-                                label=f"{cand}",
-                            )
+                            xs = neighbors[xidx, meidx, kidx, :, :, :, cidx].flatten()
+                            ys = mets[yidx, :, :, :, cidx].flatten()
+                        axes[kidx, meidx * 3 + tidx].scatter(xs, ys, label=f"{cand}")
+                    axes[kidx, meidx * 3 + tidx].set_title(
+                        f"corr: {np.corrcoef(neighbors[xidx, meidx, kidx].flatten(), mets[yidx].flatten())[0, 1]:.2f}"
+                    )
                     if meidx * 3 + tidx == 0:
                         axes[kidx, meidx * 3 + tidx].set_ylabel(f"{k}", size="large")
                     if kidx == len(ks) - 1:
@@ -549,7 +563,21 @@ if __name__ == "__main__":
         ],
     )
     parser.add_argument(
-        "--dataset", type=str, choices=["MUTAG", "Mutagenicity", "NCI1", "ZINC"]
+        "--dataset",
+        type=str,
+        choices=[
+            "MUTAG",
+            "Mutagenicity",
+            "NCI1",
+            "ENZYMES",
+            "IMDB-MULTI",
+            "ZINC",
+            "synthetic_bin",
+            "synthetic_mul",
+            "synthetic_reg",
+            "ogbg-mollipo",
+            "ogbg-molesol",
+        ],
     )
     # For tSNE_embedding
     parser.add_argument(
@@ -562,7 +590,7 @@ if __name__ == "__main__":
     if args.dataset == "MUTAG":
         args.kfold = 5
         args.epochs = 30
-    elif args.dataset in ["Mutagenicity", "NCI1"]:
+    elif args.dataset in ["Mutagenicity", "NCI1", "ENZYMES"]:
         args.kfold = 5
         args.epochs = 100
     elif args.dataset == "ZINC":
@@ -595,11 +623,7 @@ if __name__ == "__main__":
                                 emb_dim=emb_dim,
                                 pooling=pooling,
                                 metrics=["l1", "l2"],
-                                ks=(
-                                    [1, 5, 10]
-                                    if args.dataset == "MUTAG"
-                                    else [1, 5, 10, 20]
-                                ),
+                                ks=[1, 5, 10, 20],
                             )
                         else:
                             neighbors_correspondence_TUDataset(
@@ -612,7 +636,7 @@ if __name__ == "__main__":
                                 metrics=["l1", "l2"],
                                 ks=(
                                     [1, 5, 10]
-                                    if args.dataset == "MUTAG"
+                                    if args.dataset in ["MUTAG"]
                                     else [1, 5, 10, 20]
                                 ),
                             )
@@ -624,7 +648,7 @@ if __name__ == "__main__":
             emb_dims=[32, 64, 128],
             poolings=["mean", "sum"],
             metrics=["l1", "l2"],
-            ks=[1, 5, 10] if args.dataset == "MUTAG" else [1, 5, 10, 20],
+            ks=[1, 5, 10] if args.dataset in ["MUTAG"] else [1, 5, 10, 20],
         )
     elif args.command == "tSNE_embedding":
         tSNE_embedding(
