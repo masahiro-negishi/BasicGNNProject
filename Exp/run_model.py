@@ -125,6 +125,28 @@ def main(args):
     if use_tracking:
         tracker = get_tracker(config.tracker, args, config.project)
 
+    path = os.path.join(
+        config.RESULTS_PATH,
+        "nosplit" if args.train_with_all_data else "split",
+        args.dataset,
+        args.model,
+        f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
+        f"fold{args.test_fold}",
+    )
+    if args.save_dist:
+        # Initial results
+        model.eval()
+        embeddings = torch.cat(
+            [
+                compute_embeddings(batch, model, device).detach()
+                for batch in full_loader
+            ],
+            dim=0,
+        )
+        dist_l1 = torch.cdist(embeddings, embeddings, p=1)
+        dist_l2 = torch.cdist(embeddings, embeddings, p=2)
+        torch.save(dist_l1.to(torch.float16), os.path.join(path, "dist_l1_init.pt"))
+        torch.save(dist_l2.to(torch.float16), os.path.join(path, "dist_l2_init.pt"))
     print("Begin training.\n")
     time_start = time.time()
     train_results, val_results, test_results = [], [], []
@@ -272,14 +294,6 @@ def main(args):
         tracker.finish()
 
     # Save results
-    path = os.path.join(
-        config.RESULTS_PATH,
-        "nosplit" if args.train_with_all_data else "split",
-        args.dataset,
-        args.model,
-        f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
-        f"fold{args.test_fold}",
-    )
     if args.save_rslt:
         os.makedirs(path, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(path, "model_last.pt"))
