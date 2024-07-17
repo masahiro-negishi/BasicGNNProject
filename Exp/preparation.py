@@ -14,6 +14,7 @@ from torch_geometric.datasets import (  # type: ignore
     ZINC,
     GNNBenchmarkDataset,
     LRGBDataset,
+    MoleculeNet,
     TUDataset,
 )
 from torch_geometric.loader import DataLoader  # type: ignore
@@ -132,11 +133,37 @@ def load_dataset(args, config):
         if args.train_with_all_data:
             datasets = [dataset, None, None]
         else:
-            split_idx = dataset.get_idx_split()
+            # split_idx = dataset.get_idx_split()
+            # datasets = [
+            #     dataset[split_idx["train"]],
+            #     dataset[split_idx["valid"]],
+            #     dataset[split_idx["test"]],
+            # ]
+            n_samples = len(dataset)
+            indices = np.random.RandomState(seed=args.seed).permutation(n_samples)
+            train_indices = np.concatenate(
+                (
+                    indices[: (args.test_fold * n_samples) // args.k_fold],
+                    indices[(args.test_fold + 1) * n_samples // args.k_fold :],
+                )
+            )
+            eval_indices = indices[
+                (args.test_fold * n_samples)
+                // args.k_fold : (2 * args.test_fold + 1)
+                * n_samples
+                // (2 * args.k_fold)
+            ]
+            test_indices = indices[
+                (2 * args.test_fold + 1)
+                * n_samples
+                // (2 * args.k_fold) : (args.test_fold + 1)
+                * n_samples
+                // args.k_fold
+            ]
             datasets = [
-                dataset[split_idx["train"]],
-                dataset[split_idx["valid"]],
-                dataset[split_idx["test"]],
+                dataset[train_indices],
+                dataset[eval_indices],
+                dataset[test_indices],
             ]
 
     # Cyclic Skip Link dataset

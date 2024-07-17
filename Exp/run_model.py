@@ -135,6 +135,7 @@ def main(args):
     )
     if args.save_dist:
         # Initial results
+        os.makedirs(path, exist_ok=True)
         model.eval()
         embeddings = torch.cat(
             [

@@ -13,3 +13,6 @@ networkx
 torchmetrics
 types-PyYAML
 seaborn==0.13.2
+
+# For MoleculeNet
+rdkit==2024.3.1
