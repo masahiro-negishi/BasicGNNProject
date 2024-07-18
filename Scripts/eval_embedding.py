@@ -1,12 +1,12 @@
 import argparse
 import json
 import os
-import sys
 from argparse import Namespace
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from ogb.graphproppred import PygGraphPropPredDataset  # type: ignore
 from sklearn.manifold import TSNE
 from torch_geometric.datasets import ZINC, TUDataset  # type: ignore
 
@@ -349,6 +349,151 @@ def neighbors_correspondence_ZINC(
         json.dump(stats, f)
 
 
+def neighbors_correspondence_Lipo(
+    kfold: int,
+    model: str,
+    layer: int,
+    emb_dim: int,
+    pooling: str,
+    metrics: list[str],
+    ks: list[int],
+):
+    ks.sort()
+
+    dirpath = os.path.join(
+        os.path.dirname(__file__),
+        "../Results",
+        "split",
+        "ogbg-mollipo",
+        model,
+        f"l={layer}_p={pooling}_d={emb_dim}",
+    )
+    if os.path.exists(os.path.join(dirpath, "neighbor.json")):
+        with open(os.path.join(dirpath, "neighbor.json")) as f:
+            stats = json.load(f)
+    else:
+        stats = {}
+
+    dataset = PygGraphPropPredDataset(
+        root=os.path.join(
+            os.path.dirname(__file__), "../Data/Datasets", "ogbg-mollipo", "Compose([])"
+        ),
+        name="ogbg-mollipo",
+    )
+    n_samples = len(dataset)
+    indices = np.random.RandomState(seed=SEED).permutation(n_samples)
+    keep_train = torch.zeros((len(metrics), len(ks), kfold))
+    keep_test = torch.zeros((len(metrics), len(ks), kfold))
+    for fold in range(kfold):
+        train_indices = np.concatenate(
+            (
+                indices[: (fold * n_samples) // kfold],
+                indices[(fold + 1) * n_samples // kfold :],
+            )
+        )
+        test_indices = indices[
+            ((2 * fold + 1) * n_samples)
+            // (2 * kfold) : (fold + 1)
+            * n_samples
+            // kfold
+        ]
+        train_dataset = dataset[train_indices]
+        test_dataset = dataset[test_indices]
+        for midx, metric in enumerate(metrics):
+            dist_mat = torch.load(
+                os.path.join(dirpath, f"fold{fold}", f"dist_{metric}_best.pt")
+            )
+            # set diagonal to inf
+            dist_mat.fill_diagonal_(float("inf"))
+            # train
+            dist_mat_train = dist_mat[train_indices][:, train_indices]
+            _, train_indices_sorted = torch.sort(dist_mat_train, dim=1)
+            anchor_y = torch.zeros(len(train_indices))
+            neighbor_y = torch.zeros(len(train_indices), max(ks))
+            ymax, ymin = -float("inf"), float("inf")
+            for anchor in range(len(train_indices)):
+                anchor_y[anchor] = train_dataset[anchor].y
+                ymax = max(ymax, anchor_y[anchor].item())
+                ymin = min(ymin, anchor_y[anchor].item())
+                for k in range(max(ks)):
+                    neighbor_y[anchor][k] = train_dataset[
+                        train_indices_sorted[anchor][k]
+                    ].y
+            for kidx, k in enumerate(ks):
+                keep_train[midx, kidx, fold] = torch.mean(
+                    (
+                        1
+                        - torch.abs(anchor_y.reshape(-1, 1) - neighbor_y[:, :k])
+                        / (ymax - ymin)
+                    ).sum(dim=1)
+                    / k
+                    - torch.sum(
+                        (
+                            1
+                            - torch.abs(
+                                anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1)
+                            )
+                            / (ymax - ymin)
+                        ),
+                        dim=1,
+                    )
+                    / (len(anchor_y) - 1)
+                ).item()
+            # test
+            dist_mat_test = dist_mat[test_indices][:, test_indices]
+            _, test_indices_sorted = torch.sort(dist_mat_test, dim=1)
+            ymax, ymin = -float("inf"), float("inf")
+            for anchor in range(len(test_indices)):
+                anchor_y[anchor] = test_dataset[anchor].y
+                ymax = max(ymax, anchor_y[anchor].item())
+                ymin = min(ymin, anchor_y[anchor].item())
+                for k in range(max(ks)):
+                    neighbor_y[anchor][k] = test_dataset[
+                        test_indices_sorted[anchor][k]
+                    ].y
+            for kidx, k in enumerate(ks):
+                keep_test[midx, kidx] = torch.mean(
+                    (
+                        1
+                        - torch.abs(anchor_y.reshape(-1, 1) - neighbor_y[:, :k])
+                        / (ymax - ymin)
+                    ).sum(dim=1)
+                    / k
+                    - torch.sum(
+                        (
+                            1
+                            - torch.abs(
+                                anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1)
+                            )
+                            / (ymax - ymin)
+                        ),
+                        dim=1,
+                    )
+                    / (len(anchor_y) - 1)
+                ).item()
+
+    # average over kfold
+    if "train" not in stats:
+        stats["train"] = {}
+    if "test" not in stats:
+        stats["test"] = {}
+    for midx, metric in enumerate(metrics):
+        if metric not in stats["train"]:
+            stats["train"][metric] = {}
+        if metric not in stats["test"]:
+            stats["test"][metric] = {}
+        for kidx, k in enumerate(ks):
+            if k not in stats["train"][metric]:
+                stats["train"][metric][k] = {}
+                stats["test"][metric][k] = {}
+            stats["train"][metric][k]["mean"] = keep_train[midx, kidx].mean().item()
+            stats["train"][metric][k]["std"] = keep_train[midx, kidx].std().item()
+            stats["test"][metric][k]["mean"] = keep_test[midx, kidx].mean().item()
+            stats["test"][metric][k]["std"] = keep_test[midx, kidx].std().item()
+    with open(os.path.join(dirpath, "neighbor.json"), "w") as f:
+        json.dump(stats, f)
+
+
 def neighbor_acc_plot(
     dataset: str,
     kfold: int,
@@ -409,7 +554,19 @@ def neighbor_acc_plot(
                                 log = json.load(f)
                                 mets[tidx, midx, lidx, eidx, pidx] += log[
                                     f"details_{target}"
-                                ]["accuracy" if dataset != "ZINC" else "mae"][-1]
+                                ][
+                                    (
+                                        "mae"
+                                        if dataset == "ZINC"
+                                        else (
+                                            "rmse (ogb)"
+                                            if dataset == "ogbg-mollipo"
+                                            else "accuracy"
+                                        )
+                                    )
+                                ][
+                                    -1
+                                ]
     mets /= kfold
 
     for color, cands in [
@@ -452,10 +609,21 @@ def neighbor_acc_plot(
                             size="large",
                         )
         fig.supxlabel(
-            "Neighbor probability" if dataset != "ZINC" else "Neighbor difference",
+            (
+                "Neighbor probability"
+                if dataset not in ["ZINC", "ogbg-mollipo"]
+                else "Neighbor difference"
+            ),
             size="xx-large",
         )
-        fig.supylabel("Accuracy" if dataset != "ZINC" else "MAE", size="xx-large")
+        fig.supylabel(
+            (
+                "MAE"
+                if dataset == "ZINC"
+                else ("RMSE" if dataset == "ogbg-mollipo" else "ACC")
+            ),
+            size="xx-large",
+        )
         handles, labels = axes[0, 0].get_legend_handles_labels()
         fig.legend(handles, labels, loc="upper right")
         os.makedirs(
@@ -590,7 +758,7 @@ if __name__ == "__main__":
     if args.dataset == "MUTAG":
         args.kfold = 5
         args.epochs = 30
-    elif args.dataset in ["Mutagenicity", "NCI1", "ENZYMES"]:
+    elif args.dataset in ["Mutagenicity", "NCI1", "ENZYMES", "ogbg-mollipo"]:
         args.kfold = 5
         args.epochs = 100
     elif args.dataset == "ZINC":
@@ -618,6 +786,16 @@ if __name__ == "__main__":
                         )
                         if args.dataset == "ZINC":
                             neighbors_correspondence_ZINC(
+                                model=model,
+                                layer=layer,
+                                emb_dim=emb_dim,
+                                pooling=pooling,
+                                metrics=["l1", "l2"],
+                                ks=[1, 5, 10, 20],
+                            )
+                        elif args.dataset == "ogbg-mollipo":
+                            neighbors_correspondence_Lipo(
+                                args.kfold,
                                 model=model,
                                 layer=layer,
                                 emb_dim=emb_dim,
