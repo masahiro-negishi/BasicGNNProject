@@ -130,7 +130,7 @@ def main(args):
         "nosplit" if args.train_with_all_data else "split",
         args.dataset,
         args.model,
-        f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
+        f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}_s={args.seed}",
         f"fold{args.test_fold}",
     )
     if args.save_dist:
@@ -339,7 +339,7 @@ def main(args):
                 "nosplit" if args.train_with_all_data else "split",
                 args.dataset,
                 args.model,
-                f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}",
+                f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}_s={args.seed}",
                 "info.json",
             ),
             "w",
