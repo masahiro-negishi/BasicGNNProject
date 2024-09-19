@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from ogb.graphproppred import PygGraphPropPredDataset  # type: ignore
-from sklearn.manifold import TSNE
+from sklearn.manifold import TSNE  # type: ignore
 from torch_geometric.datasets import ZINC, TUDataset  # type: ignore
 
 from Exp.preparation import get_model, load_dataset
@@ -183,12 +183,16 @@ def neighbors_correspondence_TUDataset(
                     ].y
             corresp = neighbor_classes == anchor_class.unsqueeze(1)
             for kidx, k in enumerate(ks):
-                keep_train[midx, kidx, fold] = torch.mean(
-                    corresp[:, :k].sum(dim=1) / k
-                    - torch.tensor(
-                        [train_expectation[g.y] for g in dataset[train_indices]]
-                    )
-                ).item()
+                keep_train[midx, kidx, fold] = (
+                    torch.mean(
+                        corresp[:, :k].sum(dim=1) / k
+                        - torch.tensor(
+                            [train_expectation[g.y] for g in dataset[train_indices]]
+                        )
+                    ).item()
+                    * (len(train_indices) - 1)
+                    / (len(train_indices) - k - 1)
+                )
             # test
             dist_mat_test = dist_mat[test_indices][:, test_indices]
             _, test_indices_sorted = torch.sort(dist_mat_test, dim=1)
@@ -202,12 +206,16 @@ def neighbors_correspondence_TUDataset(
                     ].y
             corresp = neighbor_classes == anchor_class.unsqueeze(1)
             for kidx, k in enumerate(ks):
-                keep_test[midx, kidx, fold] = torch.mean(
-                    corresp[:, :k].sum(dim=1) / k
-                    - torch.tensor(
-                        [test_expectation[g.y] for g in dataset[test_indices]]
-                    )
-                ).item()
+                keep_test[midx, kidx, fold] = (
+                    torch.mean(
+                        corresp[:, :k].sum(dim=1) / k
+                        - torch.tensor(
+                            [test_expectation[g.y] for g in dataset[test_indices]]
+                        )
+                    ).item()
+                    * (len(test_indices) - 1)
+                    / (len(test_indices) - k - 1)
+                )
 
     # average over kfold
     if "train" not in stats:
@@ -239,6 +247,7 @@ def neighbors_correspondence_ZINC(
     metrics: list[str],
     ks: list[int],
 ):
+    raise NotImplementedError("should be adjusted like neighbors_correspondence_Lipo")
     ks.sort()
 
     dirpath = os.path.join(
@@ -420,25 +429,29 @@ def neighbors_correspondence_Lipo(
                         train_indices_sorted[anchor][k]
                     ].y
             for kidx, k in enumerate(ks):
-                keep_train[midx, kidx, fold] = torch.mean(
-                    (
-                        1
-                        - torch.abs(anchor_y.reshape(-1, 1) - neighbor_y[:, :k])
-                        / (ymax - ymin)
-                    ).sum(dim=1)
-                    / k
-                    - torch.sum(
+                keep_train[midx, kidx, fold] = (
+                    torch.mean(
                         (
                             1
-                            - torch.abs(
-                                anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1)
-                            )
+                            - torch.abs(anchor_y.reshape(-1, 1) - neighbor_y[:, :k])
                             / (ymax - ymin)
-                        ),
-                        dim=1,
-                    )
-                    / (len(anchor_y) - 1)
-                ).item()
+                        ).sum(dim=1)
+                        / k
+                        - torch.sum(
+                            (
+                                1
+                                - torch.abs(
+                                    anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1)
+                                )
+                                / (ymax - ymin)
+                            ),
+                            dim=1,
+                        )
+                        / (len(anchor_y) - 1)
+                    ).item()
+                    * (len(train_indices) - 1)
+                    / (len(train_indices) - k - 1)
+                )
             # test
             dist_mat_test = dist_mat[test_indices][:, test_indices]
             _, test_indices_sorted = torch.sort(dist_mat_test, dim=1)
@@ -452,25 +465,29 @@ def neighbors_correspondence_Lipo(
                         test_indices_sorted[anchor][k]
                     ].y
             for kidx, k in enumerate(ks):
-                keep_test[midx, kidx] = torch.mean(
-                    (
-                        1
-                        - torch.abs(anchor_y.reshape(-1, 1) - neighbor_y[:, :k])
-                        / (ymax - ymin)
-                    ).sum(dim=1)
-                    / k
-                    - torch.sum(
+                keep_test[midx, kidx] = (
+                    torch.mean(
                         (
                             1
-                            - torch.abs(
-                                anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1)
-                            )
+                            - torch.abs(anchor_y.reshape(-1, 1) - neighbor_y[:, :k])
                             / (ymax - ymin)
-                        ),
-                        dim=1,
-                    )
-                    / (len(anchor_y) - 1)
-                ).item()
+                        ).sum(dim=1)
+                        / k
+                        - torch.sum(
+                            (
+                                1
+                                - torch.abs(
+                                    anchor_y.reshape(-1, 1) - anchor_y.reshape(1, -1)
+                                )
+                                / (ymax - ymin)
+                            ),
+                            dim=1,
+                        )
+                        / (len(anchor_y) - 1)
+                    ).item()
+                    * (len(test_indices) - 1)
+                    / (len(test_indices) - k - 1)
+                )
 
     # average over kfold
     if "train" not in stats:
