@@ -76,15 +76,19 @@ def add_training_arguments(parser):
         default=32,
         help="Input batch size for training (default: 32)",
     )
-    parser.add_argument("--k_fold", type=int, default=5, help="Number of folds")
-    parser.add_argument("--test_fold", type=int, default=0, help="Fold to test on")
+    parser.add_argument("--k_fold", type=int, help="Number of folds")
+    parser.add_argument("--test_fold", type=int, help="Fold to test on")
     parser.add_argument(
-        "--save_rslt", action="store_true", help="Save results after training"
+        "--save_rslt",
+        action="store_true",
+        help="Save results after training",
+        default=True,
     )
     parser.add_argument(
         "--save_dist",
         action="store_true",
         help="Save pairwise distances after training",
+        default=True,
     )
 
 
