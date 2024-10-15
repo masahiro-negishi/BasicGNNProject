@@ -1,108 +1,61 @@
 # BasicGNNProject
-This repository is meant as a starting point for your own GNN research projects. This code allows you to tune, train and evaluate basic models on well known graph datasets. 
+This repository is forked from [BasicGNNProject](https://github.com/ocatias/BasicGNNProject), and modified.
+Note that the original tests from [BasicGNNProject](https://github.com/ocatias/BasicGNNProject) can be unsuccessful.
 
-Projects based on this repository:
-- _Expressivity-Preserving GNN Simulation_, NeurIPS, 2023: [paper](https://openreview.net/forum?id=ytTfonl9Wd), [code](https://github.com/ocatias/GNN-Simulation)
-- _Expectation-Complete Graph Representations with Homomorphisms_, ICML, 2023: [paper](https://openreview.net/forum?id=ppgRPC14uI), [code](https://github.com/ocatias/HomCountGNNs)
-- _Weisfeiler and Leman Return with Graph Transformations_, MLG@ECMLPKDD, 2022: [paper](https://openreview.net/pdf?id=Oq5mzL-3SUV), [code](https://github.com/ocatias/WL_Return)
-- _Reducing Learning on Cell Complexes to Graphs_, GTRL@ICLR, 2022, [paper](https://openreview.net/pdf?id=HKUxAE-J6lq), [code](https://github.com/ocatias/CellComplexesToGraphs)
-
-If you find this repository helpful please give it a :star:.
-
-## Supported Models and Datasets
-
-**Models:**
-- Message Pasing Graph Neural Networks: `GIN`, `GCN`, `GAT`
-- Equivariant Subgraph Aggregation Networks: `DS`, `DSS`
-- Multilayer perceptron that ignores the graph structure: `MLP`
-
-**Datasets:**
-- `ZINC` 
-- `CSL`: please use cross validation for this dataset
-- OGB datasets: `ogbg-molhiv`, `ogbg-moltox21`, `ogbg-molesol`, `ogbg-molbace`, `ogbg-molclintox`, `ogbg-molbbbp`, `ogbg-molsider`, `ogbg-moltoxcast`, `ogbg-mollipo`
-- Long Range Graph Benchmark datasets: `Peptides-struct`, `Peptides-func`, `PascalVOC-SP`
-- QM9: `QM9` or `QM9_i` if you only want to predict the i-th property
-
-
-## Setup
-
-Clone this repository and open the directory
+## Setup 
 ```
-git clone https://github.com/ocatias/BasicGNNProject
-cd BasicGNNProject
+$ pwd 
+xxx/BasicGNNProject
+$ export PYTHONPATH=$PYTHONPATH:$PATH # Let `$PATH` be the path to where this repository is stored (i.e. the result of running `pwd`).
+$ pyenv global 3.10.11
+$ python -m venv bgnn_env
+$ source bgnn_env/bin/activate
+$ pip install --upgrade pip
+$ pip list 
+Package    Version
+---------- -------
+pip        24.2
+setuptools 65.5.0
+$ pip install -r requirements.txt
 ```
 
-Add this directory to the python path. Let `$PATH` be the path to where this repository is stored (i.e. the result of running `pwd`).
-```
-export PYTHONPATH=$PYTHONPATH:$PATH
-```
+For VSCode users, you can open this repo with wilt.code-workspace after installing the following extensions:
+- ms-python.black-formatter
+- ms-python.flake8
+- ms-python.isort
+- ms-python.mypy-type-checker
 
-Create a conda environment (this assume miniconda is installed)
-```
-conda create --name GNNs
-```
+## Run experiments
+Note that only the following datasets are supported. However, it is quite straightforward to extend to other datasets.
+- ogbg-mollipo
+- Mutagenicity
+- ENZYMES
 
-Activate environment
+### 1. Train GNN with train/eval/test data
+The whole dataset is split into k_fold subsets, and then one of the subsets is further split into an eval/test dataset.
+E.g.) Training GCN on Mutagenicity. The dataset is split into 5 subsets, and the 2nd subset (0-index) is used for eval/test datasets.
 ```
-conda activate GNNs
+python Exp/run_model.py --model GCN --dataset Mutagenicity --scheduler None --epochs 100 --lr 0.001 --batch_size 32 --k_fold 5 --test_fold 2 --seed 0 --emb_dim 64 --pooling sum --num_mp_layers 3
 ```
-
-Install dependencies
+### 2. Train GNN with only train data
+E.g.) Training GCN on all data in Mutagenicity.
 ```
-conda install pytorch==1.12.0 torchvision==0.13.0 torchaudio==0.12.0 -c pytorch; conda install -c pyg pyg=2.2.0; pip install -r requirements.txt
-```
-
-### Tracking
-Per default, experiments are tracked tracked via [wandb](https://wandb.ai/). This can be disabled in `Configs/config.yaml`. If you want to make use of this tracking you need a wandb account. The first time you train a model, you will be prompted to enter you wandb API key. If you want to disable tracking you can do this in the config `Configs/config.yaml`.
-
-## How to Train a GNN
-
-### Running a Model
-
-To train a GNN `$GNN` once on a datasets `$dataset` run
-```
-python Exp/run_model.py --model $GNN --dataset $dataset
+python Exp/run_model.py --model GCN --dataset Mutagenicity --scheduler None --train_with_all_data --epochs 100 --lr 0.001 --batch_size 32 --seed 0 --emb_dim 64 --pooling sum --num_mp_layers 3
 ```
 
-For example `python Exp/run_model.py --model GIN --dataset ZINC`. This trains the GNN GIN on the ZINC dataset a single time. The result of the training will be shown in the terminal. The different hyperparameters of the GNN can be set via commandline parameters. For more details call `python Exp/run_model.py -h`.
-
-### Running a Series of Experiments
-
-The script `Exp/run_experiment.py` optimizes hyperparameters over a parameter grid and then evaluates the parameters with the best performance on the validation set multiple times. For example:
+### 3. Calculate the structural alignment
+Computing RMSE in Definition 3 of our paper. Note that you should train GNN with the train/eval/test split before.
 ```
-python Exp/run_experiment.py -grid Configs/Benchmark/GIN_grid.yaml -dataset ogbg-molesol --candidates 20 --repeats 10 
-```
-This command tries 20 hyperparameter configurations defined in the `GIN_grid.yaml` config on the `ogbg-molesol` dataset and evaluates the best parameters 10 times. The result of these experiments will be stored in the directory `Results/ogbg-molesol_GIN_grid.yaml`, the averages of the best parameters are stored in `final.json`. If you have a dataset that requires cross-validation (e.g. `CSL`), then you need to set the number of folds (for example `--folds 10`).
-
-### Tuning Hyperparameters with WandB
-
-As `Exp/run_model.py` allows to set model hyperparameters from the commandline, we can use WandB sweeps to optimize hyperparameters.  Here is a short guide, you need to specify your parameter and scripts to run in a config file (see `Configs/WandB_grids/example_grid.yaml`). The sweep can then be initialized with
-```
-wandb sweep Configs/WandB_Grids/example_grid.yaml
-```
-This command will tell you the command needed to join agents to the sweep. You can even join agents on different computers to the same sweep! Sweeps can also be initialized purely from scripts. More details on sweeps be found [here](https://wandb.ai/site/sweeps).
-
-
-
-## Testing
-
-To run integration tests
-```
-python -m unittest
+python Paper/rmse.py --dataset Mutagenicity --seed 0 --kfold 5
 ```
 
-## Citations
-**Models**
-- GIN: _How Powerful are Graph Neural Networks?_; Xu et al.; ICLR 2019
-- GCN: _Semi-Supervised Classification with Graph Convolutional Networks_; Kipf and Welling; ICLR 2017
-- GAT: _Graph Attention Networks_; Veličković at al.;  ICLR 2018
-- DS and DSS: _Equivariant Subgraph Aggregation Networks_; Bevilacqua et al.; ICLR 2022
+### 4. Calculate the functional alignment
+Computing $ALI_k$ in Definition 4 of our paper. Note that you should train GNN with the train/eval/test split before.
+```
+python Paper/alignment.py --dataset Mutagenicity --seed 0 --kfold 5
+```
 
-
-**Datasets**
-- ZINC: _Automatic Chemical Design Using a Data-Driven Continuous Representation of Molecules_; Gómez-Bombarelli et al.; ACS Central Science 2018
-- ZINC: _ZINC 15 – Ligand Discovery for Everyone_; Sterling and Irwin; Journal of Chemical Information and Modeling 2018
-- CSL: _Relational Pooling for Graph Representations_; Murphy et al.; ICML 2019
-- OGB: _Open Graph Benchmark: Datasets for Machine Learning on Graph_; Hu et al.; NeurIPS 2020
-- Long Range Graph Benchmark: _Long Range Graph Benchmark_; Dwivedi et al.; NeurIPS 2022
-- QM9: _MoleculeNet: A Benchmark for Molecular Machine Learning_; Wu et al.; Chemical Science 2018
+### 5. Reproduce figures 
+```
+python Paper/figures.py
+```

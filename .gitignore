@@ -138,7 +138,13 @@ dmypy.json
 # env
 bgnn_env/
 
-# evaluation results
 Evals/
-Paper/
 Dis_mx/
+
+Paper/*
+!Paper/alignment.py
+!Paper/rmse.py
+!Paper/figures.py
+!Paper/alignment_dmpnn_dfunc.pdf
+!Paper/rmse_dmpnn_dstruc.pdf
+!Paper/alignment_acc.pdf
