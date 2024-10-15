@@ -52,11 +52,19 @@ def track_epoch(tracker, epoch, metric_name, train_result, val_result, test_resu
 
 
 def print_progress(
-    train_loss, val_loss, test_loss, metric_name, train_metric, val_metric, test_metric
+    train_loss,
+    val_loss,
+    test_loss,
+    metric_name,
+    train_metric,
+    val_metric,
+    test_metric,
+    trainOnly,
 ):
     print(f"\tTRAIN\t loss: {train_loss:6.4f}\t {metric_name}: {train_metric:10.4f}")
-    print(f"\tVAL\t loss: {val_loss:6.4f}\t  {metric_name}: {val_metric:10.4f}")
-    print(f"\tTEST\t loss: {test_loss:6.4f}\t  {metric_name}: {test_metric:10.4f}")
+    if not trainOnly:
+        print(f"\tVAL\t loss: {val_loss:6.4f}\t  {metric_name}: {val_metric:10.4f}")
+        print(f"\tTEST\t loss: {test_loss:6.4f}\t  {metric_name}: {test_metric:10.4f}")
 
 
 def main(args):
@@ -70,8 +78,8 @@ def main(args):
             args.scheduler != "ReduceLROnPlateau"
         ), "Cannot use ReduceLROnPlateau without val set"
         assert args.tracking == 0, "Cannot use tracking without val set"
-        assert args.k_fold == 1, "Cannot use k-fold without val set"
-        assert args.test_fold == 0, "Cannot use test fold without val set"
+        assert args.k_fold is None, "Cannot use k-fold without val set"
+        assert args.test_fold is None, "Cannot use test fold without val set"
 
     set_seed(args.seed)
     full_loader, train_loader, val_loader, test_loader = load_dataset(args, config)
@@ -131,7 +139,7 @@ def main(args):
         args.dataset,
         args.model,
         f"l={args.num_mp_layers}_p={args.pooling}_d={args.emb_dim}_s={args.seed}",
-        f"fold{args.test_fold}",
+        "" if args.train_with_all_data else f"fold{args.test_fold}",
     )
     if args.save_dist:
         # Initial results
@@ -176,6 +184,7 @@ def main(args):
                 train_result[eval_name],
                 0,
                 0,
+                True,
             )
         else:
             val_result = eval(
@@ -211,6 +220,7 @@ def main(args):
                 train_result[eval_name],
                 val_result[eval_name],
                 test_result[eval_name],
+                False,
             )
 
         if use_tracking:
@@ -279,6 +289,7 @@ def main(args):
             result_train,
             result_val,
             result_test,
+            False,
         )
 
     if use_tracking:
